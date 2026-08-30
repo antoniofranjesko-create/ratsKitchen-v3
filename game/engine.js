@@ -6,7 +6,7 @@
 'use strict';
 
 const COLOURS = ['red', 'blue', 'green'];
-const THRESHOLD = 6;   // weight to win
+const THRESHOLD = 5;   // Rat King win at weight 5 (was 6) — pairs with unlimited card play   // weight to win
 const STARS = 3;
 const HAND = 7;
 const ALPHA_COLOURS = 4;   // Alpha shows on all 4 colours (big inspection target)
@@ -53,37 +53,54 @@ const CARDS = {
   rattrap:     { name: 'Rat Trap',        cls: 'engine', desc: 'The next rat that would enter the trapped kitchen is caught and sent to the bins.' },
   exterm:      { name: 'Exterminator',    cls: 'engine', desc: 'Remove any one rat — yours or a rival-s — to the bins. Cool your own heat, or set a rival back.' },
   inherit:     { name: 'Inheritance',     cls: 'engine', desc: 'Place on a rival. If THAT rival is later shut down, you take 2 of their cards at random.' },
-  gambit:      { name: 'Gambit',          cls: 'drawn', desc: 'Look at the top 3 cards of the deck. Keep 1; put the other 2 back on top (you know what they are).' },
-  wd_release:  { name: 'WD: Rat Release', cls: 'drawn', desc: 'When drawn, fires at once. The top bins rat escapes to the kitchen holding most of its colour. Cannot be held.' },
+  gambit:      { name: 'Gambit',          cls: 'engine', desc: 'Look at the top 3 cards of the deck. Keep 1; put the other 2 back on top (you know what they are). Boost: keep 2.' },
 };
 
-// per-player-count deck config (13% density band; see spec 10e)
+// per-player-count deck config — LOCKED numbers (balance-confirmed via sim).
 function deckConfig(P) {
-  // Inspections scale gently; §6 counts are the 6P baseline.
-  const inspScale = P / 6;
-  const mole   = Math.max(6, Math.round(8 * inspScale));
-  const sched1 = Math.max(6, Math.round(10 * inspScale));
-  const sched2 = Math.max(6, Math.round(10 * inspScale));
+  // Inspections: only the MOLE (colourless snap) scales with player count, and
+  // it scales on a flattened curve (√ of P/6) so high-P games aren't flooded.
+  // The coloured Scheduled cards are FIXED at sched1=9, sched2=6 so their
+  // colour-slots total 9 + 12 = 21 = exactly 7 per colour (red/blue/green).
+  // Scaling the coloured cards would break that even split.
+  const inspScale = Math.pow(P / 6, 0.5);
+  const HI_MULT = 0.85;                                    // overall inspection dial
+  const mole   = Math.max(2, Math.round(8 * inspScale * HI_MULT));
+  const sched1 = 9;                                        // FIXED, colour-balanced
+  const sched2 = 6;                                        // FIXED, colour-balanced
   const actions = {
     mole, sched1, sched2,
     poach: 5, switch: 3, chilli: 4, hotratato: 4, grease: 3, klepto: 3, shakedown: 3,
     territorial: 3, wok: 2, boardup: 4,
     food: 12, cat: 3, lastresort: 3,
     delivery: 4, recycle: 3, rattrap: 5, exterm: 3, inherit: 3,
-    gambit: 3, wd_release: 8,
+    gambit: 6,                                             // normal Engine card (was WD x3)
   };
-  // Rats sized to hold a roughly CONSTANT density (~17%) regardless of player
-  // count — so it never becomes 'every other card', and per-player rats fall
-  // out naturally (small games rat-rich, big games leaner).
   const ratatoRats = 5;
   const actionTotal = Object.values(actions).reduce((s, x) => s + x, 0);
-  const TARGET_DENSITY = 0.17;
+  const TARGET_DENSITY = 0.22;    // deck rat density (plain+fat+ability sprinkle)
   const totalRats = Math.round(TARGET_DENSITY * actionTotal / (1 - TARGET_DENSITY));
   const deckRats = Math.max(6, totalRats - ratatoRats);
-  const binSeed = 15;   // deliberate excess — some rats never get played
-  const reshuffleRats = 7;   // fixed number of bin rats added to deck at each reshuffle (~half original density)
-  return { actions, deckRats, ratatoRats, binSeed, reshuffleRats };
+  const binSeed = 15;             // deliberate excess — some bin rats never get drawn
+  const reshuffleRats = 7;        // plain/fat rats reclaimed from bins at each reshuffle
+  const fatShare = 0.15;          // deck rat mix: 30% plain / 15% fat / 55% ability
+  const plainShare = 0.30;
+  return { actions, deckRats, ratatoRats, binSeed, reshuffleRats, fatShare, plainShare };
 }
+
+// ── Market Day event pool (start-of-round events) ──────────────────────────
+// 6 events, 1 copy each. Health Scare CUT (too swingy/silly per design call).
+// Curfew CUT to hit 6 — it's a pure social-layer no-op vs bots anyway.
+// Cheese Glut and Rat Boom remain parked from the prior pass.
+const MARKET_EVENTS = [
+  { event: 'rat_release',  name: 'Rat Release',       desc: 'The player holding the fewest rats draws 1 rat from the bins.' },
+  { event: 'frenzy',       name: 'Frenzy',            desc: 'Every player draws 1 card.' },
+  { event: 'blackout',     name: 'Blackout',          desc: 'Every player discards 1 card.' },
+  { event: 'pied_piper',   name: 'Pied Piper',        desc: 'Every player passes one of their own rats one seat to the left, simultaneously.' },
+  { event: 'roulette',     name: 'Russian Roulette',  desc: 'Everyone antes a card; one Naked Mole Rat is shuffled in and dealt back. Whoever draws it is inspected (-1 star).' },
+  { event: 'day_off',      name: "Inspector's Day Off",desc: 'No Health Inspection may be armed this round. Already-armed inspections still fire.' },
+];
+function buildMarketDeck() { return MARKET_EVENTS.map(e => ({ id: rid(), ...e })); }
 
 function rid() { return Math.random().toString(36).slice(2, 9); }
 
@@ -106,31 +123,78 @@ function makeRat(kind, colour) {
 // number of times across all of them (matches the rat heat-balance — no colour
 // is safer to hold rats in). 1-colour card = 1 appearance; 2-colour = 2.
 function assignScheduledColours(cards) {
-  // build a queue of colour 'slots', cycling through COLOURS so they're even
-  let ci = Math.floor(Math.random() * COLOURS.length);   // random start each game
-  const nextColour = () => { const c = COLOURS[ci % COLOURS.length]; ci++; return c; };
-  // shuffle the cards so which physical card gets which colour is random
-  for (let i = cards.length - 1; i > 0; i--) { const j = Math.floor(Math.random()*(i+1)); [cards[i],cards[j]]=[cards[j],cards[i]]; }
-  for (const c of cards) {
-    if (c.card === 'sched1') {
-      c.cols = [nextColour()];
-    } else {   // sched2: two DIFFERENT colours
-      const a = nextColour();
-      let b = nextColour();
-      if (b === a) b = nextColour();   // avoid a duplicate pair
-      c.cols = [a, b];
-    }
+  // Build an EXACT balanced pool of colour slots. Total slots = (#sched1 ×1) +
+  // (#sched2 ×2). With counts chosen so this is divisible by 3, each colour
+  // gets exactly total/3 slots. We then deal slots to cards, giving each sched2
+  // two DIFFERENT colours. This guarantees a perfectly even colour spread every
+  // game (the previous cycling approach desynced whenever a duplicate 2-colour
+  // pair forced an extra colour off the cycle).
+  const nc = COLOURS.length;
+  const sched1s = cards.filter(c => c.card === 'sched1');
+  const sched2s = cards.filter(c => c.card === 'sched2');
+  const totalSlots = sched1s.length + sched2s.length * 2;
+  const per = Math.floor(totalSlots / nc);
+  const slots = [];
+  for (const col of COLOURS) for (let i = 0; i < per; i++) slots.push(col);
+  // distribute any remainder slots (when not perfectly divisible) round-robin
+  let rem = totalSlots - slots.length, ci = Math.floor(Math.random() * nc);
+  while (rem-- > 0) { slots.push(COLOURS[ci % nc]); ci++; }
+  // shuffle slots
+  for (let i = slots.length - 1; i > 0; i--) { const j = Math.floor(Math.random()*(i+1)); [slots[i],slots[j]]=[slots[j],slots[i]]; }
+
+  // 1-colour cards: one slot each
+  for (const c of sched1s) c.cols = [slots.pop()];
+  // 2-colour cards: two DIFFERENT slots each; if the two drawn match, swap the
+  // second with a non-matching slot further down the pool
+  for (const c of sched2s) {
+    const a = slots.pop();
+    let bi = slots.length - 1;
+    while (bi >= 0 && slots[bi] === a) bi--;
+    let b;
+    if (bi >= 0) { b = slots.splice(bi, 1)[0]; } else { b = slots.pop(); }   // fallback if all remaining equal a
+    c.cols = [a, b];
   }
 }
 
 function buildRatPool(n, opts) {
   opts = opts || {};
-  // rat type shares (Ratato excluded here — added separately). Sewer is colourless.
-  const mix = [
-    ['plain', 0.22], ['runner', 0.15], ['fat', 0.12], ['sow', 0.04],
-    ['alpha', 0.06], ['sewer', 0.10], ['toll', 0.08], ['feral', 0.08],
-    ['spice', 0.06], ['boiler', 0.05], ['larder', 0.04], ['grub', 0.10],
-  ];
+  // ── mix selection ──────────────────────────────────────────────────────
+  // 'deck': 30% Street / 15% Fat / 55% ability rats — the shuffled main deck.
+  // 'bins': a heavier ability concentration plus the deck-excluded exclusives
+  //         (Sewer; Alpha is added separately, guaranteed exactly once). Pulling
+  //         from the bins therefore stays a genuine bonus over a deck draw.
+  //         'all': legacy full mix, kept only for isolation testing.
+  let mix;
+  if (opts.mixSource === 'deck') {
+    // Deck rat mix (Koko-specified): ~30% Street (plain), ~15% Fat, the
+    // remaining ~55% spread across the ability rats. The bins still hold a
+    // heavier ability concentration plus the deck-excluded exclusives
+    // (Sewer, Alpha), so pulling from the bins stays a genuine bonus.
+    const plainShare = opts.plainShare != null ? opts.plainShare : 0.30;
+    const fatShare = opts.fatShare != null ? opts.fatShare : 0.15;
+    const abilityShare = Math.max(0, 1 - plainShare - fatShare);
+    const ability = [
+      ['runner', 1], ['sow', 1], ['toll', 1], ['feral', 1],
+      ['spice', 1], ['boiler', 1], ['larder', 1], ['grub', 1],
+    ];
+    const aTot = ability.reduce((s, [, w]) => s + w, 0);
+    mix = [['plain', plainShare], ['fat', fatShare],
+           ...ability.map(([k, w]) => [k, abilityShare * w / aTot])];
+  } else if (opts.mixSource === 'bins') {
+    const raw = [
+      ['runner', 0.15], ['sow', 0.05], ['sewer', 0.12], ['toll', 0.10],
+      ['feral', 0.10], ['spice', 0.08], ['boiler', 0.08], ['larder', 0.07], ['grub', 0.13],
+    ];
+    const tot = raw.reduce((s, [, w]) => s + w, 0);
+    mix = raw.map(([k, w]) => [k, w / tot]);
+  } else {
+    // legacy 'all' mix (pre-split; isolation-test only)
+    mix = [
+      ['plain', 0.22], ['runner', 0.15], ['fat', 0.12], ['sow', 0.04],
+      ['alpha', 0.06], ['sewer', 0.10], ['toll', 0.08], ['feral', 0.08],
+      ['spice', 0.06], ['boiler', 0.05], ['larder', 0.04], ['grub', 0.10],
+    ];
+  }
   // 1) pick types
   const picked = [];
   for (let i = 0; i < n; i++) {
@@ -194,28 +258,45 @@ function newGame(playerDefs) {
   }
   assignScheduledColours(scheduledCards);
   for (const c of scheduledCards) deck.push(c);
-  for (const r of buildRatPool(cfg.deckRats)) deck.push({ id: r.id, rat: r });
-  // Ratato Rats (0 weight, 1 heat) — spread across colours
+  // ── DECK rats: plain + fat ONLY. Every ability rat lives in the bins —
+  // pulling from the bins (Special Delivery, the Rat Release market event)
+  // is a genuine bonus over a plain deck draw, not just a shortcut.
+  for (const r of buildRatPool(cfg.deckRats, { mixSource: 'deck', fatShare: cfg.fatShare, plainShare: cfg.plainShare })) deck.push({ id: r.id, rat: r });
+  // Ratato Rats (0 weight, 1 heat) — held in hand, not "kitchen stock" in the
+  // plain/fat sense, so they stay in the shuffled deck alongside action cards.
   for (let i = 0; i < cfg.ratatoRats; i++) deck.push({ id: rid(), rat: makeRat('ratato', COLOURS[i % COLOURS.length]) });
   shuffle(deck);
 
-  // bins seeded with rats (bins == discard)
-  const bins = buildRatPool(cfg.binSeed).map(r => ({ id: r.id, rat: r }));
+  // ── BINS: every ability rat (runner/sow/sewer/toll/feral/spice/boiler/
+  // larder/grub) seeded here, never in the shuffled deck.
+  const bins = buildRatPool(cfg.binSeed, { mixSource: 'bins' }).map(r => ({ id: r.id, rat: r }));
 
   const g = {
     players, deck, bins, discard: [], P,
     reshuffleRats: cfg.reshuffleRats,
     turn: 0, active: 0, over: false, winner: null,
     log: [], pending: null,   // pending reaction window
+    // ── Market Days ──────────────────────────────────────────────────────
+    // Separate pool. One card flipped at the START of each round, applies that
+    // round, then discards. 6 events, 1 copy each, cycling deck (reshuffled
+    // when empty). g.market holds the currently-active round modifier.
+    marketDeck: shuffle(buildMarketDeck()),
+    marketDiscard: [],
+    market: null,        // { event, ... } — the active round's modifier
+    _roundCounter: 0,    // counts down alive-players; 0 → flip next market day
+    _round: 0,            // total rounds elapsed (increments on each market flip)
+    _firstElimTurn: null, // g.turn value at the first-ever elimination this game
   };
 
-  // Alpha Rat placed randomly in the deck (one copy, arrives any time)
+  // Alpha Rat: guaranteed exactly one copy, placed in the BINS (not the deck —
+  // it's an ability rat like the rest). Reached via Special Delivery / Rat
+  // Release, same as every other special rat.
   {
     const strip = arr => arr.filter(x => !(x.rat && x.rat.kind === 'alpha'));
     g.deck = strip(g.deck); g.bins = strip(g.bins);
     const alpha = makeRat('alpha', COLOURS[Math.floor(Math.random()*COLOURS.length)]);
-    const at = Math.floor(Math.random() * (g.deck.length + 1));
-    g.deck.splice(at, 0, { id: alpha.id, rat: alpha });
+    const at = Math.floor(Math.random() * (g.bins.length + 1));
+    g.bins.splice(at, 0, { id: alpha.id, rat: alpha });
   }
 
   // deal hands (guarantee 1 Food each, rest from deck non-rats)
@@ -225,8 +306,7 @@ function newGame(playerDefs) {
     while (dealt < HAND - 1) {
       const c = drawCard(g);
       if (!c) break;
-      if (c.rat) { bins.push(c); }
-      else if (c.card === 'wd_release') { g.deck.unshift(c); }
+      if (c.rat) { g.bins.push(c); }
       else { p.hand.push(c); dealt++; }
     }
   }
@@ -240,16 +320,20 @@ function drawCard(g) {
     // pulled from the bins (lower density each cycle — rats grow scarce late game).
     const newDeck = g.discard.splice(0);
     const n = g.reshuffleRats || 7;
-    const ratsAvailable = g.bins.filter(b => b.rat);
+    // Only plain/fat-kind rats return to the deck at reshuffle — ability rats
+    // (which only ever reach the bins via removal-from-play, since none are
+    // seeded there) must stay bin-exclusive, or the "deck = plain/fat only"
+    // rule quietly breaks after the first reshuffle.
+    const ratsAvailable = g.bins.filter(b => b.rat && (b.rat.kind === 'plain' || b.rat.kind === 'fat'));
     const take = Math.min(n, ratsAvailable.length);
     for (let i = 0; i < take; i++) {
-      // pull from the TOP of the rat-bin
-      const idx = g.bins.findIndex(b => b.rat);
+      // pull from the TOP of the rat-bin, skipping ability rats
+      const idx = g.bins.findIndex(b => b.rat && (b.rat.kind === 'plain' || b.rat.kind === 'fat'));
       if (idx >= 0) newDeck.push(g.bins.splice(idx, 1)[0]);
     }
     if (newDeck.length === 0) return null;   // nothing left anywhere
     g.deck = shuffle(newDeck);
-    logAdd(g, `Deck reshuffled — ${take} rats return from the bins (the rest stay buried).`);
+    logAdd(g, `Deck reshuffled — ${take} plain/fat rats return from the bins (ability rats stay buried).`);
   }
   return g.deck.pop();
 }
@@ -314,12 +398,13 @@ function tryCat(g, t, rat) {
   return false;
 }
 
-function damage(g, t, d) {
+function damage(g, t, d, src) {
   if (d <= 0) return;
   t.stars -= d;
   if (t.stars <= 0) eliminate(g, t);
 }
 function eliminate(g, t) {
+  if (g._firstElimTurn == null) g._firstElimTurn = g.turn;
   // Inheritance: whoever PLACED an Inheritance marker on this specific
   // player takes 2 of their cards at random when they fall.
   if (t._inheritBy) {
@@ -368,4 +453,5 @@ module.exports = {
   newGame, drawCard, weight, winWeight, alphaWin, heat, heatOf, hasCol, opponents,
   ratEnters, ratToBins, fireMole, fireScheduled, tryCat, damage,
   eliminate, checkWin, logAdd, shuffle, rid, makeRat, deckConfig,
+  buildMarketDeck, MARKET_EVENTS,
 };

@@ -7,10 +7,22 @@ const { COLOURS, THRESHOLD, HAND } = E;
 // Reactives (wok/cat) are handled inside inspection/steal resolution.
 
 function startTurn(g) {
+  // ── Market Day: flip one event at the START of each round ────────────────
+  // A round = one pass of all alive players. _roundCounter counts down; at 0
+  // (incl. game start) we flip the next Market Day, which applies all round.
+  if ((g._roundCounter || 0) <= 0) {
+    flipMarketDay(g);
+    g._roundCounter = g.players.filter(pp => pp.alive).length;
+    if (g.over) return;   // a market effect ended the game
+  }
+  g._roundCounter--;
+
   const p = g.players[g.active];
+  if (!p.alive) return;   // market effect eliminated the active player pre-turn
   p.turns++;
   p._actedAttack = false;
   p._actedBuild = false;
+  p._plays = 0;           // play counter (unlimited play — retained for telemetry / optional future cap)
   p._ratsIn = 0;
   p._playedRat = false;   // one rat into your kitchen per turn (Ratato/hand-play)
   p._hitZones = {};
@@ -56,31 +68,102 @@ function startTurn(g) {
       p.hand.push(c);
       const d = E.CARDS[c.card] || {};
       g.justDrew.push({ isRat: false, name: d.name || c.card, cls: d.cls || 'drawn' });
-      if (c.card === 'wd_release') resolveWDRelease(g, p, c);
     }
   }
 }
 
-function resolveWDRelease(g, p, card) {
-  // remove the WD card itself from hand to discard
-  p.hand = p.hand.filter(c => c.id !== card.id);
-  g.discard.push(card);
-  // take the TOP rat of the bins (last pushed)
-  let idx=-1; for(let i=g.bins.length-1;i>=0;i--){ if(g.bins[i].rat){idx=i;break;} }
-  if (idx<0) return;
-  const pick = g.bins.splice(idx,1)[0];
-  // joins the kitchen with most rats of that colour; ties/none -> drawer
-  let best = null, bn = -1;
-  for (const q of g.players) {
-    if (!q.alive) continue;
-    const n = q.rats.filter(r => r.col === pick.rat.col).length;
-    if (n > bn) { bn = n; best = q; }
-    else if (n === bn && q.id === p.id) best = p;
+// ── Market Days ───────────────────────────────────────────────────────────
+function flipMarketDay(g) {
+  g._round = (g._round || 0) + 1;
+  // discard the previous round's event
+  if (g.market) { g.marketDiscard.push(g.market); g.market = null; }
+  if (!g.marketDeck.length) { g.marketDeck = E.shuffle(g.marketDiscard.splice(0)); }
+  const md = g.marketDeck.pop();
+  if (!md) return;
+  g.market = md;
+  E.logAdd(g, `── Market Day: ${md.name} — ${md.desc}`);
+  const alive = () => g.players.filter(p => p.alive);
+  const anyWin = () => { const a = alive()[0]; if (a) E.checkWin(g, a); };
+
+  switch (md.event) {
+    case 'rat_release': {
+      // lowest rat COUNT draws 1 from the top of the bins (catch-up); seat-first tie-break
+      const cand = alive().slice().sort((x, y) => x.rats.length - y.rats.length || x.seat - y.seat)[0];
+      if (!cand) break;
+      let idx = -1; for (let i = g.bins.length - 1; i >= 0; i--) { if (g.bins[i].rat) { idx = i; break; } }
+      if (idx < 0) break;
+      const b = g.bins.splice(idx, 1)[0];
+      if (E.ratEnters(g, cand, b.rat)) { E.logAdd(g, `Rat Release: ${cand.name} takes a ${b.rat.name} from the bins.`); E.checkWin(g, cand); }
+      break;
+    }
+    case 'frenzy': {
+      for (const q of alive()) {
+        const c = E.drawCard(g); if (!c) continue;
+        if (c.rat) { if (c.rat.kind === 'ratato') q.hand.push({ id: c.rat.id, ratcard: c.rat }); else if (E.ratEnters(g, q, c.rat)) E.checkWin(g, q); }
+        else q.hand.push(c);
+        if (g.over) return;
+      }
+      E.logAdd(g, `Frenzy: everyone draws a card.`);
+      break;
+    }
+    case 'blackout': {
+      for (const q of alive()) {
+        if (!q.hand.length) continue;
+        const i = Math.floor(Math.random() * q.hand.length);
+        const c = q.hand.splice(i, 1)[0];
+        if (c.rat) g.bins.unshift(c); else if (c.ratcard) g.bins.unshift({ id: c.ratcard.id, rat: c.ratcard }); else g.discard.push(c);
+      }
+      E.logAdd(g, `Blackout: everyone discards a card.`);
+      break;
+    }
+    case 'pied_piper': {
+      // each player passes ONE chosen rat one seat left, simultaneously.
+      const a = alive().slice().sort((x, y) => x.seat - y.seat);
+      if (a.length < 2) break;
+      // left neighbour = previous alive seat (wrap)
+      const moves = [];
+      a.forEach((q, i) => {
+        if (!q.rats.length) return;
+        // bot policy: offload the hottest rat (biggest liability)
+        const rat = q.rats.slice().sort((r1, r2) => r2.heat - r1.heat || r2.w - r1.w)[0];
+        const left = a[(i - 1 + a.length) % a.length];
+        moves.push({ from: q, rat, to: left });
+      });
+      for (const m of moves) m.from.rats = m.from.rats.filter(r => r.id !== m.rat.id);
+      for (const m of moves) { E.ratEnters(g, m.to, m.rat); }
+      E.logAdd(g, `Pied Piper: rats shuffle one seat left.`);
+      for (const q of a) if (E.checkWin(g, q)) return;
+      break;
+    }
+    case 'roulette': {
+      const a = alive();
+      const pool = [];
+      for (const q of a) { if (q.hand.length) { const i = Math.floor(Math.random() * q.hand.length); pool.push(q.hand.splice(i, 1)[0]); } }
+      const mole = { id: E.rid(), card: 'mole', _rr: true };
+      pool.push(mole);
+      E.shuffle(pool);
+      a.forEach((q, idx) => {
+        const c = pool[idx];
+        if (!c) return;
+        if (c._rr) { E.fireMole(g, null, q); g.discard.push(c); }
+        else q.hand.push(c);
+      });
+      // any leftover cards (incl. the mole if it fell past the last seat) → discard unseen
+      for (let idx = a.length; idx < pool.length; idx++) { const c = pool[idx]; if (c._rr) g.discard.push(c); else if (c.rat) g.bins.unshift(c); else g.discard.push(c); }
+      E.logAdd(g, `Russian Roulette resolves.`);
+      anyWin();
+      break;
+    }
+    case 'day_off':   // handled as a legality modifier (no arming this round)
+    case 'curfew':    // social-layer freeze — no mechanical effect vs bots
+      break;
   }
-  const tgt = bn > 0 ? best : p;
-  E.ratEnters(g, tgt, pick.rat);
-  E.logAdd(g, `WD: Rat Release — a ${pick.rat.name} scurries to ${tgt.name}.`);
-  E.checkWin(g, tgt);
+  // A market effect can eliminate the last one or two players at once; make sure
+  // the game ends cleanly (checkWin on a specific player can miss a 0-alive tie).
+  if (!g.over) {
+    const alv = g.players.filter(p => p.alive);
+    if (alv.length <= 1) { g.over = true; g.winner = alv[0] ? alv[0].id : null; }
+  }
 }
 
 // ── legality ────────────────────────────────────────────────────────────────
@@ -92,79 +175,81 @@ function legalActions(g, p) {
   const opps = E.opponents(g, p).filter(o => o.boardup === 0);
   const push = (a) => acts.push(a);
   const freeZones = list => list.filter(o => !p._hitZones[o.id]);   // zone-once
+  const capped = false;   // unlimited card play (confirmed direction)
+  const noArm = g.market && g.market.event === 'day_off';   // Inspector's Day Off
 
-  for (const c of p.hand) {
+  if (!capped) for (const c of p.hand) {
     const t = c.card;
     // ---- Ratato Rat held in hand → play into a rival kitchen (attack) ----
-    if (c.ratcard && c.ratcard.kind === 'ratato' && !p._actedAttack && !p._playedRat) {
+    if (c.ratcard && c.ratcard.kind === 'ratato' && true && !p._playedRat) {
       const tg = freeZones(opps);
       if (tg.length) push({ id: c.id, type: 'play_ratato', needsTarget: true, targets: tg.map(o => o.id), label: 'Deploy Ratato Rat into a rival' });
       continue;
     }
     if (!t) continue;
     // ---- inspections ----
-    if (t === 'mole' && !p._actedAttack) { const tg=freeZones(opps); if(tg.length) push({ id: c.id, type: t, needsTarget: true, targets: tg.map(o => o.id), label: 'Health Inspection — Snap (-1 star)' }); }
-    if ((t === 'sched1' || t === 'sched2') && !p._actedAttack && !p.armed)
+    if (t === 'mole' && true) { const tg=freeZones(opps); if(tg.length) push({ id: c.id, type: t, needsTarget: true, targets: tg.map(o => o.id), label: 'Health Inspection — Snap (-1 star)' }); }
+    if ((t === 'sched1' || t === 'sched2') && !noArm && !p.armed)
       push({ id: c.id, type: t, label: `Arm ${E.CARDS[t].sub}` });
     // ---- poach: weight-1 rat, not Boiler, not in an Alpha-guarded kitchen ----
-    if (t === 'poach' && !p._actedAttack && canGainRat(p)) {
+    if (t === 'poach' && true && canGainRat(p)) {
       const vics = freeZones(opps).filter(o => !o.rats.some(r => r.prop === 'alpha_guard') && o.rats.some(r => r.prop !== 'no_steal' && r.prop !== 'alpha_guard' && r.w <= 1));
       if (vics.length) push({ id: c.id, type: t, needsTarget: true, targets: vics.map(o => o.id), label: 'Poach a rat' });
     }
     // ---- switcheroo ----
-    if (t === 'switch' && !p._actedAttack && p.rats.length) {
+    if (t === 'switch' && true && p.rats.length) {
       const vics = freeZones(opps).filter(o => o.rats.some(r => r.prop !== 'no_steal'));
       if (vics.length) push({ id: c.id, type: t, needsTarget: true, targets: vics.map(o => o.id), label: 'Switcheroo (swap 1 rat)' });
     }
     // ---- hot chilli: PLACE on a rival's rat (not Spice), detonates next turn ----
-    if (t === 'chilli' && !p._actedAttack) {
+    if (t === 'chilli' && true) {
       const vics = freeZones(opps).filter(o => o.rats.some(r => r.prop !== 'no_explode' && !r._chilliBy));
       if (vics.length) push({ id: c.id, type: t, needsTarget: true, targets: vics.map(o => o.id), label: 'Hot Chilli (place on a rat)' });
     }
     // ---- territorial: place on a rival kitchen ----
-    if (t === 'territorial' && !p._actedAttack) { const tg=freeZones(opps); if(tg.length) push({ id: c.id, type: t, needsTarget: true, targets: tg.map(o => o.id), label: 'Territorial' }); }
-    if (t === 'hotratato' && !p._actedAttack && p.rats.length) { const tg=freeZones(opps); if(tg.length) push({ id: c.id, type: t, needsTarget: true, needsRat: true, targets: tg.map(o => o.id), label: 'Hot Ratato (dump a rat)' }); }
+    if (t === 'territorial' && true) { const tg=freeZones(opps); if(tg.length) push({ id: c.id, type: t, needsTarget: true, targets: tg.map(o => o.id), label: 'Territorial' }); }
+    if (t === 'hotratato' && true && p.rats.length) { const tg=freeZones(opps); if(tg.length) push({ id: c.id, type: t, needsTarget: true, needsRat: true, targets: tg.map(o => o.id), label: 'Hot Ratato (dump a rat)' }); }
     // ---- grease an armed rival ----
-    if (t === 'grease' && !p._actedAttack) {
+    if (t === 'grease' && true) {
       const armed = opps.filter(o => o.armed);
       if (armed.length) push({ id: c.id, type: t, needsTarget: true, targets: armed.map(o => o.id), label: 'Grease the Palm' });
     }
     // ---- kleptomaniac: steal random card from any opponent with cards ----
-    if (t === 'klepto' && !p._actedAttack) {
+    if (t === 'klepto' && true) {
       const vics = opps.filter(o => o.hand.length);
       if (vics.length) push({ id: c.id, type: t, needsTarget: true, targets: vics.map(o => o.id), label: 'Kleptomaniac (steal a card)' });
     }
     // ---- shakedown: name a card; handled with a follow-up (bot names randomly) ----
-    if (t === 'shakedown' && !p._actedAttack) {
+    if (t === 'shakedown' && true) {
       const vics = opps.filter(o => o.hand.length);
       if (vics.length) push({ id: c.id, type: t, needsTarget: true, targets: vics.map(o => o.id), label: 'Shakedown (demand a card)' });
     }
     // ---- cat: buff on your own rat (not fat/alpha) ----
-    if (t === 'cat' && !p._actedBuild) {
+    if (t === 'cat' && true) {
       const shieldable = p.rats.filter(r => r.kind !== 'fat' && r.kind !== 'alpha' && !r._catShield);
       if (shieldable.length) push({ id: c.id, type: 'cat', needsRat: true, label: 'Cat — shield a rat' });
     }
     // ---- board up ----
-    if (t === 'boardup' && !p._actedBuild)
+    if (t === 'boardup' && true)
       push({ id: c.id, type: t, label: 'Board Up (safe 1 turn)' });
     // ---- rat trap ----
-    if (t === 'rattrap' && !p._actedBuild)
+    if (t === 'rattrap' && true)
       push({ id: c.id, type: t, needsTarget: true, targets: [...opps.map(o => o.id), p.id], label: 'Rat Trap' });
     // ---- special delivery: top bins rat → you ----
-    if (t === 'delivery' && !p._actedBuild && g.bins.some(b => b.rat) && canGainRat(p) && !p._playedRat)
+    if (t === 'delivery' && true && g.bins.some(b => b.rat) && canGainRat(p) && !p._playedRat)
       push({ id: c.id, type: t, label: 'Special Delivery (top bins rat → you)' });
     // ---- trash diver: take one of the last 3 discards ----
-    if (t === 'recycle' && !p._actedBuild && g.discard.length)
+    if (t === 'recycle' && true && g.discard.length)
       push({ id: c.id, type: t, label: 'Recycle Day (recover a card)' });
     // ---- exterminator: remove ANY rat (yours or a rival's) to the bins ----
-    if (t === 'exterm' && !p._actedBuild) {
+    if (t === 'exterm' && true) {
       const withRats = [p, ...opps].filter(x => x.rats.length && (x.id === p.id || x.boardup === 0));
       if (withRats.length) push({ id: c.id, type: t, needsTarget: true, needsRat: true, targets: withRats.map(o => o.id), label: 'Exterminator (remove a rat)' });
     }
     // ---- gambit: scry top 3 ----
-    if (t === 'gambit' && !p._actedBuild && g.deck.length)
+    if (t === 'gambit' && true && g.deck.length)
       push({ id: c.id, type: t, label: 'Gambit (look at top 3)' });
-    if (t === 'inherit' && !p._actedBuild) {
+    if (t === 'inherit' && true) {
       const vics = opps.filter(o => !o._inheritBy);
       if (vics.length) push({ id: c.id, type: t, needsTarget: true, targets: vics.map(o => o.id), label: 'Inheritance (place on a rival)' });
     }
@@ -178,10 +263,10 @@ function legalActions(g, p) {
     if (legal.length) push({ type: 'fire', needsTarget: true, targets: legal.map(o => o.id), label: `Fire Inspection (${colsLabel})` });
   }
   // 2 Food -> 1 star
-  if (!p._actedBuild && p.hand.filter(c => c.card === 'food').length >= 2 && p.stars < E.STARS)
+  if (!capped && p.hand.filter(c => c.card === 'food').length >= 2 && p.stars < E.STARS)
     push({ type: 'food_heal', label: 'Spend 2 Food (+1 star)' });
   // eat: Larder Rat eats itself free; any rat only if you hold Last Resort
-  if (!p._actedBuild) {
+  if (!capped) {
     const larder = p.rats.find(r => r.prop === 'free_eat');
     if (larder) push({ type: 'eat_larder', ratId: larder.id, label: 'Eat the Larder Rat (free, +1 star)' });
     const hasLR = p.hand.find(c => c.card === 'lastresort');
@@ -198,6 +283,10 @@ function legalActions(g, p) {
 // ── apply an action ──────────────────────────────────────────────────────────
 function apply(g, p, act, targetId, ratId) {
   const t = targetId ? g.players.find(x => x.id === targetId) : null;
+  // 2 card-plays per turn. Firing an already-armed inspection is FREE (arming
+  // already cost a play last turn); Sow draw and End are free.
+  const FREE = { fire: 1, end: 1, sow_draw: 1 };
+  if (!FREE[act.type]) p._plays = (p._plays || 0) + 1;
   // record what was just played so the UI can show it physically (central slot)
   if (act.type !== 'end' && act.type !== 'sow_draw') {
     const catalogue = E.CARDS[act.type] || E.CARDS[(p.hand.find(c => c.id === act.id) || {}).card];
@@ -364,7 +453,7 @@ const theirs = t.rats.filter(r => r.prop !== 'no_steal').sort((a, b) => b.w - a.
       let keep = act.keepId ? top.find(c=>c.id===act.keepId) : top[0];
       if (!keep && top.length) keep = top[0];
       if (keep) {
-        if (keep.rat) { E.ratEnters(g, p, keep.rat); } else { p.hand.push(keep); if (keep.card==='wd_release') resolveWDRelease(g,p,keep); }
+        if (keep.rat) { E.ratEnters(g, p, keep.rat); } else { p.hand.push(keep); }
       }
       // the other two go BACK ON TOP of the deck (player knows them)
       for (const c of top) { if (c !== keep) g.deck.push(c); }
@@ -375,7 +464,7 @@ const theirs = t.rats.filter(r => r.prop !== 'no_steal').sort((a, b) => b.w - a.
     case 'sow_draw': {
       p._sowUsed = true;
       const c = E.drawCard(g);
-      if (c) { if (c.rat) { if (c.rat.kind==='ratato') p.hand.push({id:c.rat.id,ratcard:c.rat}); else E.ratEnters(g,p,c.rat); } else { p.hand.push(c); if (c.card==='wd_release') resolveWDRelease(g,p,c); } }
+      if (c) { if (c.rat) { if (c.rat.kind==='ratato') p.hand.push({id:c.rat.id,ratcard:c.rat}); else E.ratEnters(g,p,c.rat); } else { p.hand.push(c); } }
       E.logAdd(g, `${p.name} works the Sow for an extra draw.`); break;
     }
     case 'end': break;
@@ -386,6 +475,7 @@ const theirs = t.rats.filter(r => r.prop !== 'no_steal').sort((a, b) => b.w - a.
 function endTurn(g) {
   const p = g.players[g.active];
   while (p.hand.length > HAND) { const c = p.hand.shift(); if (c.rat) g.bins.unshift(c); else g.discard.push(c); }
+  if (!g.players.some(x => x.alive)) { g.over = true; g.winner = null; return; }   // no one left (simultaneous KO)
   do { g.active = (g.active + 1) % g.players.length; } while (!g.players[g.active].alive);
   g.turn++;
 }
@@ -411,7 +501,7 @@ function botTurn(g) {
       }
     }
     apply(g, p, choice, target, ratId);
-    if (p._actedAttack && p._actedBuild) {
+    if (false) {   // unlimited card play — bot plays until no useful move (guard-capped)
       // still allow firing an armed inspection (free)
       const fire = legalActions(g, p).find(a => a.type === 'fire');
       if (fire) { apply(g, p, fire, botTarget(g, p, fire)); }
@@ -508,4 +598,4 @@ function botTarget(g, p, act) {
   return cands.sort((a, b) => (E.weight(b) - E.weight(a)))[0].id;
 }
 
-module.exports = { startTurn, legalActions, apply, endTurn, botTurn, resolveWDRelease };
+module.exports = { startTurn, legalActions, apply, endTurn, botTurn };
