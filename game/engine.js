@@ -6,8 +6,8 @@
 'use strict';
 
 const COLOURS = ['red', 'blue', 'green'];
-const THRESHOLD = 5;   // Rat King win at weight 5 (was 6) — pairs with unlimited card play   // weight to win
-const STARS = 3;
+const THRESHOLD = 6;   // Rat King win at weight 6 (restored from 5)   // weight to win
+const STARS = 4;
 const HAND = 7;
 const ALPHA_COLOURS = 4;   // Alpha shows on all 4 colours (big inspection target)
 
@@ -27,6 +27,7 @@ const RATS = {
   boiler: { name: 'Boiler Rat', w: 1, heat: 1, prop: 'no_steal',    col: true,  desc: 'Cannot be Poached.' },
   larder: { name: 'Larder Rat', w: 1, heat: 1, prop: 'free_eat',    col: true,  desc: 'May eat itself for free — stars equal to its weight.' },
   grub:   { name: 'Grub Rat',   w: 1, heat: 2, prop: null,          col: true,  desc: 'Cheap stock but runs hot — weight 1, heat 2. A liability when the inspector calls.' },
+  breeder:{ name: 'Breeder Rat',w: 1, heat: 1, prop: 'breed',        col: true,  desc: 'While in your kitchen, once per turn you may spend 2 Food to take the TOP rat of the bins into your kitchen. A slow engine — the Food it eats is Food you can\'t heal with.' },
   ratato: { name: 'Ratato Rat', w: 0, heat: 1, prop: 'sabotage',    col: true,  desc: 'No weight — worthless as stock, but carries heat. Play it into a RIVAL kitchen to draw the inspector eye. Never your own.' },
 };
 
@@ -49,36 +50,57 @@ const CARDS = {
   cat:         { name: 'Cat',             cls: 'buff', desc: 'Play on one of your rats (not Fat or Alpha) to shield it — blocks the next single attack on that rat.' },
   lastresort:  { name: 'Last Resort',     cls: 'buff', desc: 'Eat any one of your rats and regain stars equal to its weight.' },
   delivery:    { name: 'Special Delivery',cls: 'engine', desc: 'Take the TOP rat of the bins into your kitchen. Never choose.' },
+  pelican:     { name: 'Pelican Delivery',cls: 'engine', desc: 'Place on any kitchen — yours or a rival\'s. At the start of your next turn the pelican drops the TOP rat of the bins into it. A gift, or a problem, depending where you aim it.' },
   recycle:     { name: 'Recycle Day',     cls: 'engine', desc: 'Take any one of the last 3 discarded action cards back into your hand.' },
-  rattrap:     { name: 'Rat Trap',        cls: 'engine', desc: 'The next rat that would enter the trapped kitchen is caught and sent to the bins.' },
+  rattrap:     { name: 'Rat Trap',        cls: 'engine', desc: 'Place on a rival kitchen. The next rat to enter it is caught — and YOU take it into your kitchen. Springs once; expires at your next turn if nothing walks in.' },
   exterm:      { name: 'Exterminator',    cls: 'engine', desc: 'Remove any one rat — yours or a rival-s — to the bins. Cool your own heat, or set a rival back.' },
   inherit:     { name: 'Inheritance',     cls: 'engine', desc: 'Place on a rival. If THAT rival is later shut down, you take 2 of their cards at random.' },
-  gambit:      { name: 'Gambit',          cls: 'engine', desc: 'Look at the top 3 cards of the deck. Keep 1; put the other 2 back on top (you know what they are). Boost: keep 2.' },
+  wd_snap:     { name: 'Snap Inspection',  cls: 'drawn', desc: 'WHEN DRAWN, reveal at once — it fires on YOU. Has one fixed colour: you lose 1 star per rat you hold of that colour. Hold none of it and the inspector walks past. Cannot be held or played.' },
+  wd_snap2:    { name: 'Snap Inspection',  sub: 'Two Colour', cls: 'drawn', desc: 'WHEN DRAWN, reveal at once — it fires on YOU. Has two fixed colours: you lose 1 star per rat you hold of EITHER. Harder to dodge than the one-colour version. Cannot be held or played.' },
+  wd_mole:     { name: 'Snap Inspection',  sub: 'Naked Mole Rat', cls: 'drawn', desc: 'WHEN DRAWN, reveal at once — it fires on YOU. The mole is blind to colour: a flat -1 star, no matter what you hold. Cannot be held or played.' },
+  gambit:      { name: 'Gambit',          cls: 'engine', desc: 'Look at the top 3 cards of the deck. Keep 1; put the other 2 back on top (you know what they are).' },
 };
 
 // per-player-count deck config — LOCKED numbers (balance-confirmed via sim).
 function deckConfig(P) {
   // Inspections: only the MOLE (colourless snap) scales with player count, and
-  // it scales on a flattened curve (√ of P/6) so high-P games aren't flooded.
-  // The coloured Scheduled cards are FIXED at sched1=9, sched2=6 so their
-  // colour-slots total 9 + 12 = 21 = exactly 7 per colour (red/blue/green).
-  // Scaling the coloured cards would break that even split.
+  // it scales on a flattened curve (√ of P/6). The coloured Scheduled cards are
+  // FIXED at sched1=10, sched2=4 so their colour-slots total 10 + 8 = 18 =
+  // exactly 6 per colour (red/blue/green). Changing these off this balanced
+  // pair (or scaling them) would break the even split.
+  // Inspections: only the MOLE (colourless snap) scales with player count, and
+  // it scales on a flattened curve (√ of P/6). The coloured Scheduled cards are
+  // FIXED at sched1=9, sched2=3 so their colour-slots total 9 + 6 = 15 =
+  // exactly 5 per colour (red/blue/green). NOTE: the divisibility test is on
+  // colour SLOTS, not card count — each 2-colour card carries two slots.
+  // Changing these off a balanced pair (or scaling them) breaks the even split.
+  // ── INSPECTION MIX ────────────────────────────────────────────────────────
+  // Split between WHEN-DRAWN (random, self-inflicted, builds draw tension) and
+  // SCHEDULED (aimed, arm-then-fire, the tactical layer).
+  //   WD snap   — coloured, fires on the drawer, 2 of each colour = 6
+  //   WD mole   — colourless, fires on the drawer, flat -1 star = 3
+  //   sched1/2  — armed and aimed. 3 single + 3 double = 9 colour-slots = 3/colour
+  //   mole      — the playable snap, the only count that scales with players
   const inspScale = Math.pow(P / 6, 0.5);
-  const HI_MULT = 0.85;                                    // overall inspection dial
-  const mole   = Math.max(2, Math.round(8 * inspScale * HI_MULT));
-  const sched1 = 9;                                        // FIXED, colour-balanced
-  const sched2 = 6;                                        // FIXED, colour-balanced
+  const HI_MULT = 0.85;
+  const mole    = Math.max(2, Math.round(4 * inspScale * HI_MULT));
+  const sched1  = 6;
+  const sched2  = 6;
+  const wd_snap = 3;      // 1 per colour
+  const wd_snap2 = 0;     // built but unused — see potential mechanics
+  const wd_mole = 2;
   const actions = {
     mole, sched1, sched2,
+    wd_snap, wd_snap2, wd_mole,
     poach: 5, switch: 3, chilli: 4, hotratato: 4, grease: 3, klepto: 3, shakedown: 3,
     territorial: 3, wok: 2, boardup: 4,
     food: 12, cat: 3, lastresort: 3,
-    delivery: 4, recycle: 3, rattrap: 5, exterm: 3, inherit: 3,
+    delivery: 4, pelican: 2, recycle: 3, rattrap: 3, exterm: 3, inherit: 3,
     gambit: 6,                                             // normal Engine card (was WD x3)
   };
   const ratatoRats = 5;
   const actionTotal = Object.values(actions).reduce((s, x) => s + x, 0);
-  const TARGET_DENSITY = 0.22;    // deck rat density (plain+fat+ability sprinkle)
+  const TARGET_DENSITY = 0.19;    // deck rat density (plain+fat+ability sprinkle)
   const totalRats = Math.round(TARGET_DENSITY * actionTotal / (1 - TARGET_DENSITY));
   const deckRats = Math.max(6, totalRats - ratatoRats);
   const binSeed = 15;             // deliberate excess — some bin rats never get drawn
@@ -175,7 +197,7 @@ function buildRatPool(n, opts) {
     const abilityShare = Math.max(0, 1 - plainShare - fatShare);
     const ability = [
       ['runner', 1], ['sow', 1], ['toll', 1], ['feral', 1],
-      ['spice', 1], ['boiler', 1], ['larder', 1], ['grub', 1],
+      ['spice', 1], ['boiler', 1], ['larder', 1], ['grub', 1], ['breeder', 0.5],
     ];
     const aTot = ability.reduce((s, [, w]) => s + w, 0);
     mix = [['plain', plainShare], ['fat', fatShare],
@@ -184,6 +206,7 @@ function buildRatPool(n, opts) {
     const raw = [
       ['runner', 0.15], ['sow', 0.05], ['sewer', 0.12], ['toll', 0.10],
       ['feral', 0.10], ['spice', 0.08], ['boiler', 0.08], ['larder', 0.07], ['grub', 0.13],
+      ['breeder', 0.06],
     ];
     const tot = raw.reduce((s, [, w]) => s + w, 0);
     mix = raw.map(([k, w]) => [k, w / tot]);
@@ -241,7 +264,7 @@ function newGame(playerDefs) {
     id: d.id, name: d.name, bot: !!d.bot, seat: i,
     stars: STARS, rats: [], hand: [],
     armed: null,            // {cols:[], age:0} — one at a time
-    boardup: 0, territorial: 0,
+    boardup: 0, territorial: 0, _pelicanBy: null,
     alive: true, turns: 0,
   }));
 
@@ -250,14 +273,27 @@ function newGame(playerDefs) {
   // Collect Scheduled cards separately so we can assign fixed colours with
   // EQUAL colour-appearances across all of them (no colour safer than another).
   const scheduledCards = [];
+  const snapCards = [];
+  const snap2Cards = [];
   for (const [type, count] of Object.entries(cfg.actions)) {
     for (let i = 0; i < count; i++) {
       if (type === 'sched1' || type === 'sched2') scheduledCards.push({ id: rid(), card: type });
+      else if (type === 'wd_snap') snapCards.push({ id: rid(), card: type });
+      else if (type === 'wd_snap2') snap2Cards.push({ id: rid(), card: type });
       else deck.push({ id: rid(), card: type });
     }
   }
   assignScheduledColours(scheduledCards);
   for (const c of scheduledCards) deck.push(c);
+  // WD Snap: exactly equal copies of each colour (3/3/3 at 9 cards)
+  snapCards.forEach((c, i) => { c.cols = [COLOURS[i % COLOURS.length]]; deck.push(c); });
+  // WD Snap 2-colour: cyclic pairing (red/blue, blue/green, green/red, repeat)
+  // gives each colour exactly 2 of every 3 cards — self-balanced regardless
+  // of how many multiples of 3 you run.
+  snap2Cards.forEach((c, i) => {
+    c.cols = [COLOURS[i % COLOURS.length], COLOURS[(i + 1) % COLOURS.length]];
+    deck.push(c);
+  });
   // ── DECK rats: plain + fat ONLY. Every ability rat lives in the bins —
   // pulling from the bins (Special Delivery, the Rat Release market event)
   // is a genuine bonus over a plain deck draw, not just a shortcut.
@@ -320,20 +356,19 @@ function drawCard(g) {
     // pulled from the bins (lower density each cycle — rats grow scarce late game).
     const newDeck = g.discard.splice(0);
     const n = g.reshuffleRats || 7;
-    // Only plain/fat-kind rats return to the deck at reshuffle — ability rats
-    // (which only ever reach the bins via removal-from-play, since none are
-    // seeded there) must stay bin-exclusive, or the "deck = plain/fat only"
-    // rule quietly breaks after the first reshuffle.
-    const ratsAvailable = g.bins.filter(b => b.rat && (b.rat.kind === 'plain' || b.rat.kind === 'fat'));
-    const take = Math.min(n, ratsAvailable.length);
-    for (let i = 0; i < take; i++) {
-      // pull from the TOP of the rat-bin, skipping ability rats
-      const idx = g.bins.findIndex(b => b.rat && (b.rat.kind === 'plain' || b.rat.kind === 'fat'));
-      if (idx >= 0) newDeck.push(g.bins.splice(idx, 1)[0]);
+    // Take the top N rats off the bins, whatever type they are — no sorting.
+    // (The deck already contains ability rats, so filtering by type served no
+    // purpose and forced a manual sort at a physical table.)
+    let take = 0;
+    for (let i = 0; i < n; i++) {
+      const idx = g.bins.findIndex(b => b.rat);
+      if (idx < 0) break;
+      newDeck.push(g.bins.splice(idx, 1)[0]);
+      take++;
     }
     if (newDeck.length === 0) return null;   // nothing left anywhere
     g.deck = shuffle(newDeck);
-    logAdd(g, `Deck reshuffled — ${take} plain/fat rats return from the bins (ability rats stay buried).`);
+    logAdd(g, `Deck reshuffled — ${take} rats return from the bins.`);
   }
   return g.deck.pop();
 }
@@ -357,7 +392,21 @@ function opponents(g, p) { return g.players.filter(o => o.alive && o.id !== p.id
 // ── rat entry (respects Territorial) ────────────────────────────────────────
 function ratEnters(g, p, rat) {
   if (p.territorial > 0) { ratToBinsBottom(g, rat); return false; }
-  if (p._rattrap) { p._rattrap = null; ratToBinsBottom(g, rat); logAdd(g, `A Rat Trap catches a ${rat.name}!`); return false; }
+  if (p._rattrap) {
+    // The trapper STEALS the rat that walks in. Trap is single-use: it springs
+    // on the first rat to enter, then it's spent.
+    const trapper = g.players.find(x => x.id === p._rattrap);
+    p._rattrap = null;
+    if (trapper && trapper.alive && trapper.id !== p.id) {
+      trapper.rats.push(rat);
+      logAdd(g, `${trapper.name}'s Rat Trap catches a ${rat.name} in ${p.name}'s kitchen — and takes it!`);
+      checkWin(g, trapper);
+    } else {
+      ratToBinsBottom(g, rat);
+      logAdd(g, `A Rat Trap catches a ${rat.name}!`);
+    }
+    return false;
+  }
   if (rat.kind === 'alpha') rat._enteredTurn = g.turn;
   p.rats.push(rat);
   return true;

@@ -33,6 +33,9 @@ function project(g, viewerId) {
     })(),
     binsRats: g.bins.filter(b => b.rat).length,
     deckLeft: g.deck.length,
+    // Market Day: the event flipped for the current round (null before any flip).
+    market: g.market ? { event: g.market.event, name: g.market.name, desc: g.market.desc } : null,
+    round: g._round || 0,
     lastDiscards: (g.discard||[]).slice(-3).map(b => ({ id: b.id, card: b.card, name: (E.CARDS[b.card]&&E.CARDS[b.card].name)||b.card })),
     players: g.players.map(p => ({
       id: p.id, name: p.name, bot: p.bot, alive: p.alive,
@@ -47,6 +50,7 @@ function project(g, viewerId) {
         const nameOf = id => { const q = g.players.find(x => x.id === id); return q ? q.name : '?'; };
         if (p._inheritBy) out.push({ key: 'inherit', name: 'Inheritance', by: nameOf(p._inheritBy), cls: 'engine' });
         if (p._rattrap) out.push({ key: 'rattrap', name: 'Rat Trap', by: nameOf(p._rattrap), cls: 'engine' });
+        if (p._pelicanBy) out.push({ key: 'pelican', name: 'Pelican Delivery', by: nameOf(p._pelicanBy), cls: 'engine' });
         if (p._terrBy) out.push({ key: 'territorial', name: 'Territorial', by: nameOf(p._terrBy), cls: 'control' });
         if (p.boardup > 0) out.push({ key: 'boardup', name: 'Board Up', by: p.name, cls: 'defence' });
         return out;
@@ -179,8 +183,11 @@ io.on('connection', (socket) => {
     if (keepId) act.keepId = keepId;
     A.apply(g, p, act, target, ratId);
     if (g.over) { broadcast(room); return; }
-    // end turn automatically when both actions used or player chose end/draw
-    if (type === 'end' || (p._actedAttack && p._actedBuild && !A.legalActions(g, p).some(a => a.type === 'fire'))) {
+    // Unlimited card play: the turn ends ONLY when the player chooses to end it.
+    // (Previously auto-ended once _actedAttack && _actedBuild were both set —
+    // a leftover of the old one-attack-one-build-per-turn rule, which silently
+    // cut turns short and blocked a second play after e.g. Gambit.)
+    if (type === 'end') {
       A.endTurn(g);
       runBots(room);
     } else {
@@ -213,7 +220,7 @@ io.on('connection', (socket) => {
   });
 });
 
-const VERSION = '3.6.0';
+const VERSION = '3.8.0';
 app.get('/version', (req, res) => res.json({ version: VERSION }));
 
 const PORT = process.env.PORT || 3000;

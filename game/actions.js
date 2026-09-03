@@ -27,6 +27,7 @@ function startTurn(g) {
   p._playedRat = false;   // one rat into your kitchen per turn (Ratato/hand-play)
   p._hitZones = {};
   p._sowUsed = false;
+  p._bredThisTurn = false;
 
   // 1) resolve YOUR lingering cards placed last turn (card-as-token): Hot Chilli detonates now
   for (const q of g.players) {
@@ -37,6 +38,23 @@ function startTurn(g) {
     });
     // Territorial placed by you expires at your next turn
     if (q._terrBy === p.id) { q._terrBy = null; q.territorial = 0; }
+    // Rat Trap you set expires unsprung at your next turn (1-turn card)
+    if (q._rattrap === p.id) { q._rattrap = null; E.logAdd(g, `${p.name}'s Rat Trap in ${q.name}'s kitchen goes unsprung.`); }
+    // Pelican Delivery you placed lands now: top bin rat drops into that kitchen
+    if (q._pelicanBy === p.id) {
+      q._pelicanBy = null;
+      let idx = -1;
+      for (let i = g.bins.length - 1; i >= 0; i--) { if (g.bins[i].rat) { idx = i; break; } }
+      if (idx >= 0) {
+        const b = g.bins.splice(idx, 1)[0];
+        if (E.ratEnters(g, q, b.rat)) {
+          E.logAdd(g, `The pelican drops a ${b.rat.name} into ${q.name}'s kitchen.`);
+          if (E.checkWin(g, q)) return;
+        }
+      } else {
+        E.logAdd(g, `The pelican arrives at ${q.name}'s kitchen — but the bins are empty.`);
+      }
+    }
   }
 
   // 2) armed Scheduled ages; must fire this turn or expire
@@ -44,7 +62,9 @@ function startTurn(g) {
     p.armed.age++;
     if (p.armed.age >= 2) { E.logAdd(g, `${p.name}'s Health Inspection expires unused.`); p.armed = null; }
   }
-  if (p.boardup > 0) p.boardup--;
+  // Board Up clears at the start of your next turn (1 turn of protection —
+  // self-clearing, so nothing to track between turns at a physical table).
+  if (p.boardup > 0) p.boardup = 0;
 
   // 3) draw phase — Runner chains; Ratato and other rats obey the entry rules
   g.justDrew = [];   // what the active player drew this turn (for UI visibility)
@@ -64,6 +84,31 @@ function startTurn(g) {
         if (E.checkWin(g, p)) return;
         if (c.rat.prop === 'draw_again') draws++;
       }
+    } else if (c.card === 'wd_snap') {
+      // WHEN DRAWN: fires at once on the drawer, then discards. Cannot be held.
+      // Damage = number of the drawer's rats in the card's colour (Fat counts 2).
+      const col = (c.cols && c.cols[0]) || 'red';
+      g.discard.push(c);
+      g.justDrew.push({ isRat: false, name: 'Snap Inspection', col, cls: 'drawn' });
+      E.logAdd(g, `${p.name} draws a ${col.toUpperCase()} Snap Inspection — it fires immediately!`);
+      E.fireScheduled(g, p, p, [col]);
+      if (!p.alive) return;
+      if (E.checkWin(g, p)) return;
+    } else if (c.card === 'wd_snap2') {
+      const cols = c.cols || ['red', 'blue'];
+      g.discard.push(c);
+      g.justDrew.push({ isRat: false, name: 'Snap Inspection (2-colour)', cols, cls: 'drawn' });
+      E.logAdd(g, `${p.name} draws a ${cols.join('/').toUpperCase()} Snap Inspection — it fires immediately!`);
+      E.fireScheduled(g, p, p, cols);
+      if (!p.alive) return;
+      if (E.checkWin(g, p)) return;
+    } else if (c.card === 'wd_mole') {
+      // WHEN DRAWN: colourless snap on the drawer, flat -1 star.
+      g.discard.push(c);
+      g.justDrew.push({ isRat: false, name: 'Snap Inspection (Mole)', cls: 'drawn' });
+      E.logAdd(g, `${p.name} draws a Naked Mole Rat Snap — it fires immediately!`);
+      E.fireMole(g, p, p);
+      if (!p.alive) return;
     } else {
       p.hand.push(c);
       const d = E.CARDS[c.card] || {};
@@ -87,8 +132,13 @@ function flipMarketDay(g) {
 
   switch (md.event) {
     case 'rat_release': {
-      // lowest rat COUNT draws 1 from the top of the bins (catch-up); seat-first tie-break
-      const cand = alive().slice().sort((x, y) => x.rats.length - y.rats.length || x.seat - y.seat)[0];
+      // Fewest rats draws 1 from the top of the bins (catch-up).
+      // TIE-BREAK: nearest to the left of the player who flipped the Market Day
+      // (i.e. the round's starting player) — not absolute seat order, which
+      // would permanently favour seat 0.
+      const start = (g.players[g.active] && g.players[g.active].seat) || 0;
+      const rel = q => (q.seat - start + g.players.length) % g.players.length;
+      const cand = alive().slice().sort((x, y) => x.rats.length - y.rats.length || rel(x) - rel(y))[0];
       if (!cand) break;
       let idx = -1; for (let i = g.bins.length - 1; i >= 0; i--) { if (g.bins[i].rat) { idx = i; break; } }
       if (idx < 0) break;
@@ -238,6 +288,12 @@ function legalActions(g, p) {
     // ---- special delivery: top bins rat → you ----
     if (t === 'delivery' && true && g.bins.some(b => b.rat) && canGainRat(p) && !p._playedRat)
       push({ id: c.id, type: t, label: 'Special Delivery (top bins rat → you)' });
+    // ---- pelican delivery: delayed drop on ANY kitchen (yours or a rival's) ----
+    if (t === 'pelican' && g.bins.some(b => b.rat)) {
+      const tg = [p, ...freeZones(opps)].filter(o => !o._pelicanBy);
+      if (tg.length) push({ id: c.id, type: t, needsTarget: true, targets: tg.map(o => o.id),
+                            label: 'Pelican Delivery (bins rat arrives next turn)' });
+    }
     // ---- trash diver: take one of the last 3 discards ----
     if (t === 'recycle' && true && g.discard.length)
       push({ id: c.id, type: t, label: 'Recycle Day (recover a card)' });
@@ -272,6 +328,11 @@ function legalActions(g, p) {
     const hasLR = p.hand.find(c => c.card === 'lastresort');
     if (hasLR && p.rats.length) push({ id: hasLR.id, type: 'eat_lastresort', needsRat: true, label: 'Last Resort — eat a rat (+stars = weight)' });
   }
+  // Breeder Rat: once/turn, spend 2 Food to take the top bins rat
+  if (!p._bredThisTurn && p.rats.some(r => r.prop === 'breed')
+      && p.hand.filter(c => c.card === 'food').length >= 2
+      && g.bins.some(b => b.rat) && canGainRat(p) && !p._playedRat)
+    push({ type: 'breed', label: 'Breeder: spend 2 Food → top bins rat' });
   // Sow Rat: once per turn you may draw instead of playing
   if (!p._sowUsed && p.rats.some(r => r.prop === 'draw_or_play'))
     push({ type: 'sow_draw', label: 'Sow: draw a card' });
@@ -393,7 +454,7 @@ const theirs = t.rats.filter(r => r.prop !== 'no_steal').sort((a, b) => b.w - a.
       if (r) { r._chilliBy = p.id; E.logAdd(g, `${p.name} plants a Hot Chilli on ${t.name}'s ${r.name} — it blows next turn.`); }
       p._actedAttack = true; break;
     }
-    case 'territorial': { bin(takeCard(act.id)); t.territorial = 2; t._terrBy = p.id; p._actedAttack = true; E.logAdd(g, `${p.name} marks ${t.name}'s kitchen Territorial.`); break; }
+    case 'territorial': { bin(takeCard(act.id)); t.territorial = 1; t._terrBy = p.id; p._actedAttack = true; E.logAdd(g, `${p.name} marks ${t.name}'s kitchen Territorial.`); break; }
     case 'grease': { bin(takeCard(act.id)); t.armed = null; p._actedAttack = true; E.logAdd(g, `${p.name} greases ${t.name}'s inspector.`); break; }
     case 'cat': {
       bin(takeCard(act.id));
@@ -401,7 +462,7 @@ const theirs = t.rats.filter(r => r.prop !== 'no_steal').sort((a, b) => b.w - a.
       if (r) { r._catShield = true; E.logAdd(g, `${p.name} shields a ${r.name} with a Cat.`); }
       p._actedBuild = true; break;
     }
-    case 'boardup': { bin(takeCard(act.id)); p.boardup = 2; p._actedBuild = true; E.logAdd(g, `${p.name} boards up.`); break; }
+    case 'boardup': { bin(takeCard(act.id)); p.boardup = 1; p._actedBuild = true; E.logAdd(g, `${p.name} boards up.`); break; }
     case 'rattrap': { bin(takeCard(act.id)); t._rattrap = p.id; p._actedBuild = true; E.logAdd(g, `${p.name} sets a Rat Trap on ${t.name}.`); break; }
     case 'delivery': {
       bin(takeCard(act.id));
@@ -409,6 +470,15 @@ const theirs = t.rats.filter(r => r.prop !== 'no_steal').sort((a, b) => b.w - a.
       let idx = -1;
       for (let i = g.bins.length - 1; i >= 0; i--) { if (g.bins[i].rat) { idx = i; break; } }
       if (idx >= 0) { const b = g.bins.splice(idx, 1)[0]; if (E.ratEnters(g, p, b.rat)) { p._ratsIn++; p._playedRat = true; } E.logAdd(g, `${p.name} takes the top bins rat — a ${b.rat.name}.`); }
+      p._actedBuild = true; break;
+    }
+    case 'pelican': {
+      bin(takeCard(act.id));
+      const kitchen = t || p;
+      kitchen._pelicanBy = p.id;
+      const whose = kitchen.id === p.id ? 'their own kitchen' : `${kitchen.name}'s kitchen`;
+      E.logAdd(g, `${p.name} signals the pelican toward ${whose}.`);
+      if (t && t.id !== p.id) { if(!p._hitZones) p._hitZones={}; p._hitZones[t.id] = true; }
       p._actedBuild = true; break;
     }
     case 'exterm': {
@@ -439,10 +509,17 @@ const theirs = t.rats.filter(r => r.prop !== 'no_steal').sort((a, b) => b.w - a.
       p._actedAttack = true; break;
     }
     case 'recycle': {
-      bin(takeCard(act.id));
-      const last3 = g.discard.slice(-3);
+      const spent = takeCard(act.id);
+      bin(spent);
+      // Never recover the Recycle card that was just spent — otherwise a bot
+      // (or player) can loop Recycle→Recycle→Recycle forever.
+      const eligible = g.discard.filter(c => c.id !== (spent && spent.id) && c.card !== 'recycle');
+      const last3 = eligible.slice(-3);
       const pickId = act.pickId || (last3.length ? last3[last3.length-1].id : null);
-      if (pickId) { const idx = g.discard.findIndex(b => b.id === pickId); if (idx>=0) { p.hand.push(g.discard.splice(idx,1)[0]); E.logAdd(g, `${p.name} recycles a card from the discard.`); } }
+      if (pickId && pickId !== (spent && spent.id)) {
+        const idx = g.discard.findIndex(b => b.id === pickId);
+        if (idx>=0) { p.hand.push(g.discard.splice(idx,1)[0]); E.logAdd(g, `${p.name} recycles a card from the discard.`); }
+      }
       p._actedBuild = true; break;
     }
     case 'gambit': {
@@ -461,6 +538,19 @@ const theirs = t.rats.filter(r => r.prop !== 'no_steal').sort((a, b) => b.w - a.
       E.logAdd(g, `${p.name} plays Gambit and digs through the deck.`); break;
     }
     case 'inherit': { bin(takeCard(act.id)); t._inheritBy = p.id; p._actedBuild = true; E.logAdd(g, `${p.name} places Inheritance on ${t.name}.`); break; }
+    case 'breed': {
+      // spend 2 Food from hand
+      let spent = 0;
+      p.hand = p.hand.filter(c => { if (c.card === 'food' && spent < 2) { spent++; g.discard.push(c); return false; } return true; });
+      // take the TOP rat of the bins
+      let idx = -1;
+      for (let i = g.bins.length - 1; i >= 0; i--) { if (g.bins[i].rat) { idx = i; break; } }
+      if (idx >= 0) {
+        const b = g.bins.splice(idx, 1)[0];
+        if (E.ratEnters(g, p, b.rat)) { p._ratsIn++; p._playedRat = true; E.logAdd(g, `${p.name}'s Breeder produces a ${b.rat.name} (2 Food spent).`); }
+      }
+      p._bredThisTurn = true; p._actedBuild = true; break;
+    }
     case 'sow_draw': {
       p._sowUsed = true;
       const c = E.drawCard(g);
@@ -496,7 +586,12 @@ function botTurn(g) {
         const kitchen = target ? g.players.find(x => x.id === target) : p;
         const r = kitchen && kitchen.rats.slice().sort((a, b) => (kitchen.id===p.id ? b.heat-a.heat : b.w-a.w))[0];
         ratId = r && r.id;
+      } else if (choice.type === 'hotratato') {
+        // dump your biggest LIABILITY (hottest, lightest), not your best rat
+        const r = p.rats.slice().sort((a, b) => (b.heat - a.heat) || (a.w - b.w))[0];
+        ratId = r && r.id;
       } else {
+        // Cat / Last Resort: act on the most valuable rat
         const r = p.rats.slice().sort((a, b) => b.w - a.w)[0]; ratId = r && r.id;
       }
     }
@@ -546,6 +641,16 @@ function botChoose(g, p, acts) {
     if (has('eat_larder')) return has('eat_larder'); if (has('eat_lastresort')) return has('eat_lastresort');
     if (has('boardup')) return has('boardup');
   }
+  // 2b. top up when wounded even if not facing lethal damage right now —
+  // otherwise Food/Last Resort effectively never get played.
+  if (p.stars < E.STARS && (threat > 0 || p.stars <= E.STARS - 2)) {
+    if (has('food_heal')) return has('food_heal');
+    if (has('eat_larder')) return has('eat_larder');
+    // Last Resort is a real cost (you lose the rat), so only when properly hurt
+    if (p.stars <= 2 && has('eat_lastresort')) return has('eat_lastresort');
+  }
+  // 2c. shield your most valuable rat while it's safe to do so
+  if (has('cat') && p.rats.length) return has('cat');
   // 3. strip a rival about to win (prioritise an Alpha holder)
   if (rivalClose) {
     for (const t of ['poach', 'switch', 'chilli', 'hotratato', 'mole', 'sched2', 'sched1', 'territorial']) if (has(t)) return has(t);
@@ -557,6 +662,9 @@ function botChoose(g, p, acts) {
   }
   // 5. productive plays first — grow your own kitchen
   if (has('delivery')) return has('delivery');
+  // Breeder: convert spare Food into a rat when safe and healthy enough not to
+  // need that Food for healing (stars at/near full, no live threat).
+  if (has('breed') && threat === 0 && p.stars >= E.STARS - 1) return has('breed');
   if (has('poach')) return has('poach');
   // 6. grease a genuinely threatening armed rival
   if (has('grease')) return has('grease');
@@ -576,8 +684,10 @@ function botChoose(g, p, acts) {
   if (has('inherit') && lead) return has('inherit');
   if (has('gambit')) return has('gambit');
   if (has('klepto')) return has('klepto');
+  if (has('shakedown')) return has('shakedown');
   if (has('sow_draw')) return has('sow_draw');
   if (has('rattrap')) return has('rattrap');
+  if (has('pelican')) return has('pelican');
   return has('end');
 }
 
@@ -594,6 +704,16 @@ function botTarget(g, p, act) {
   if (act.type === 'play_ratato' || act.type === 'territorial' || act.type === 'chilli')
     return cands.sort((a, b) => E.weight(b) - E.weight(a))[0].id; // hurt the leader
   if (act.type === 'rattrap') return cands.sort((a, b) => E.weight(b) - E.weight(a))[0].id;
+  if (act.type === 'pelican') {
+    // A gift or a problem: if the bot is behind, feed itself (accumulate);
+    // if it's already leading, drop the rat on the closest rival to raise
+    // THEIR heat and make them the inspectors' target instead.
+    const rivals = cands.filter(x => x.id !== p.id);
+    const leader = rivals.slice().sort((a, b) => E.weight(b) - E.weight(a))[0];
+    const selfOK = cands.some(x => x.id === p.id);
+    if (leader && E.weight(leader) > E.weight(p)) return selfOK ? p.id : leader.id;
+    return leader ? leader.id : p.id;
+  }
   // steal/inspect: prefer close-to-win, then biggest hoard
   return cands.sort((a, b) => (E.weight(b) - E.weight(a)))[0].id;
 }
