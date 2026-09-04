@@ -22,7 +22,7 @@ function code() { return Math.random().toString(36).slice(2, 6).toUpperCase(); }
 function project(g, viewerId) {
   return {
     over: g.over, winner: g.winner, active: g.players[g.active] && g.players[g.active].id,
-    turn: g.turn, threshold: E.THRESHOLD, log: g.log.slice(-14),
+    turn: g.turn, threshold: E.THRESHOLD, maxStars: E.STARS, anyElim: g._firstElimTurn != null, log: g.log.slice(-14),
     lastPlayed: g.lastPlayed || null,
     awaitingStep: (() => {
       // a step is available when the game isn't over, it's a bot's turn coming up,
@@ -156,6 +156,14 @@ io.on('connection', (socket) => {
     runBots(room);
   });
 
+  socket.on('restart', () => {
+    const room = rooms[myRoom]; if (!room) return;
+    // rebuild a fresh game with the same seated players
+    room.game = E.newGame(room.players.map(p => ({ id: p.id, name: p.name, bot: p.bot })));
+    io.to(myRoom).emit('begin', {});
+    runBots(room);
+  });
+
   socket.on('peekGambit', ({ id }) => {
     const room = rooms[myRoom]; if (!room || !room.game || room.game.over) return;
     const g = room.game;
@@ -220,7 +228,7 @@ io.on('connection', (socket) => {
   });
 });
 
-const VERSION = '3.8.0';
+const VERSION = '3.9.0';
 app.get('/version', (req, res) => res.json({ version: VERSION }));
 
 const PORT = process.env.PORT || 3000;

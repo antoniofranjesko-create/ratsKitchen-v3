@@ -269,7 +269,7 @@ button:disabled{opacity:.35;cursor:not-allowed}
 <body>
 <div class="topbar">
   <div class="brand">RAT'S <b>KITCHEN</b></div>
-  <div class="meta"><span class="build">BUILD v3.8.0</span></div>
+  <div class="meta"><span class="build">BUILD v3.9.0</span></div>
 </div>
 
 <div id="lobby" class="wrap">
@@ -334,21 +334,27 @@ button:disabled{opacity:.35;cursor:not-allowed}
   <div class="sub">The alley has a new king</div>
   <h2 id="winnerName"></h2>
   <div class="sub" id="winnerHow"></div>
+  <div style="display:flex;gap:12px;margin-top:28px">
+    <button id="playAgainBtn">Play again</button>
+    <button id="exitBtn" class="ghost">Exit to menu</button>
+  </div>
 </div>
 
 <script>
 const socket = io();
 let YOU=null, STATE=null, picking=null, selectedCardId=null, pendingGambit=null;
 const $=id=>document.getElementById(id);
-const RAT_ART={plain:'🐀',runner:'🐀',fat:'🐀',sow:'🐀',alpha:'👑',sewer:'🐀',toll:'🐀',feral:'🐀',spice:'🐀',boiler:'🐀',larder:'🐀',grub:'🐛',breeder:'🍼',ratato:'🥔'};
-const CARD_ART={mole:'🦫',sched1:'🦅',sched2:'🦅',wd_snap:'🦅',wd_snap2:'🦅',wd_mole:'🦫',poach:'🎣',ratato:'🥔',ratato_rat:'🥔',switch:'🔄',hotratato:'🥔',chilli:'🌶️',territorial:'🚧',grease:'💰',food:'🍜',cat:'🐱',wok:'🍳',boardup:'🔨',rattrap:'🪤',delivery:'🚚',pelican:'🦩',recycle:'♻️',exterm:'🧯',inherit:'📜',gambit:'🎴',klepto:'🧤',shakedown:'💢',lastresort:'🍽️',misc:'🎲'};
-const CARD_CLS={mole:'attack',sched1:'attack',sched2:'attack',wd_snap:'drawn',wd_snap2:'drawn',wd_mole:'drawn',poach:'attack',ratato:'attack',ratato_rat:'attack',switch:'attack',hotratato:'attack',chilli:'attack',territorial:'control',grease:'attack',klepto:'attack',shakedown:'attack',food:'buff',cat:'defence',wok:'defence',boardup:'defence',lastresort:'buff',rattrap:'engine',delivery:'engine',pelican:'engine',recycle:'engine',exterm:'engine',inherit:'engine',gambit:'engine',misc:'drawn'};
+const RAT_ART={plain:'🐀',runner:'🐀',fat:'🐀',sow:'🐀',alpha:'👑',sewer:'🐀',toll:'🐀',feral:'🐀',spice:'🐀',boiler:'🐀',larder:'🐀',grub:'🐛',breeder:'🍼',ratato:'🥔',hotrat:'🌡️'};
+const CARD_ART={mole:'🦫',sched1:'🦅',sched2:'🦅',wd_snap:'🦅',wd_snap2:'🦅',wd_mole:'🦫',poach:'🎣',ratato:'🥔',hotrat:'🌡️',switch:'🔄',hotratato:'🥔',chilli:'🌶️',territorial:'🚧',grease:'💰',food:'🍜',cat:'🐱',wok:'🍳',boardup:'🔨',rattrap:'🪤',delivery:'🚚',pelican:'🦩',recycle:'♻️',exterm:'🧯',inherit:'📜',gambit:'🎴',klepto:'🧤',shakedown:'💢',lastresort:'🍽️',misc:'🎲'};
+const CARD_CLS={mole:'attack',sched1:'attack',sched2:'attack',wd_snap:'drawn',wd_snap2:'drawn',wd_mole:'drawn',poach:'attack',ratato:'attack',ratato_rat:'attack',switch:'attack',hotratato:'attack',hotrat:'attack',chilli:'attack',territorial:'control',grease:'attack',klepto:'attack',shakedown:'attack',food:'buff',cat:'defence',wok:'defence',boardup:'defence',lastresort:'buff',rattrap:'engine',delivery:'engine',pelican:'engine',recycle:'engine',exterm:'engine',inherit:'engine',gambit:'engine',misc:'drawn'};
 const CARD_TYPE={attack:'Attack',defence:'Defence',engine:'Engine',control:'Control',nerf:'Nerf',buff:'Buff',drawn:'When drawn'};
 
 $('btnCreate').onclick=()=>socket.emit('create',{name:$('name').value.trim()});
 $('btnJoin').onclick=()=>socket.emit('join',{code:$('code').value.trim().toUpperCase(),name:$('name').value.trim()});
 $('btnBot').onclick=()=>socket.emit('addBot');
 $('btnStart').onclick=()=>socket.emit('start');
+$('playAgainBtn').onclick=()=>{ $('winner').classList.add('hidden'); socket.emit('restart'); };
+$('exitBtn').onclick=()=>location.reload();
 
 socket.on('room',r=>{
   if(r.you) YOU=r.you;
@@ -468,7 +474,13 @@ function render(){
     const w=STATE.players.find(p=>p.id===STATE.winner);
     $('winner').classList.remove('hidden');
     $('winnerName').textContent=w?w.name:'Nobody';
-    $('winnerHow').textContent=w?(w.weight>=STATE.threshold?`Rat King · weight ${w.weight}`:'Last stall standing'):'';
+    let how='';
+    if(w){
+      if(w.weight>=STATE.threshold) how=`Rat King · weight ${w.weight}`;
+      else if(STATE.anyElim) how='Last stall standing';
+      else how='Winner';
+    }
+    $('winnerHow').textContent=how;
   }else $('winner').classList.add('hidden');
 }
 function waitingMsg(){const a=STATE.players.find(p=>p.id===STATE.active);return a?`Waiting on ${a.name}…`:''}
@@ -504,7 +516,8 @@ function stallHTML(p){
   if(p.id===STATE.active&&!STATE.over) cls.push('active');
   if(p.id===YOU) cls.push('you');
   if(!p.alive) cls.push('dead');
-  const bulbs=Array.from({length:3},(_,i)=>`<span class="bulb ${i<p.stars?'':'out'}"></span>`).join('');
+  const maxStars=STATE.maxStars||4;
+  const bulbs=Array.from({length:maxStars},(_,i)=>`<span class="bulb ${i<p.stars?'':'out'}"></span>`).join('');
   const pct=Math.min(100,(p.weight/STATE.threshold)*100);
   const ticks=Array.from({length:STATE.threshold},()=>'<i></i>').join('');
   // LAYER 1+2: rats (each rat carries its own buff/nerf markers via ratHTML)
@@ -628,7 +641,7 @@ function renderActions(meActive){
 function playVerb(a,card){
   // friendlier verb than the raw label when a card is already selected
   const map={mole:'Inspect (snap, -1 star)',sched1:'Arm inspection',sched2:'Arm 2-colour inspection',
-    poach:'Poach a rat',ratato:'Dump a rat',hotratato:'Dump a rat on a rival',switch:'Swap a rat',chilli:'Explode a rat',
+    poach:'Poach a rat',ratato:'Dump a rat',hotratato:'Ratata Quente — dump a rat',switch:'Swap a rat',chilli:'Explode a rat',
     territorial:'Mark territorial',grease:'Grease their inspector',boardup:'Board up',cat:'Shield a rat',wok:'Ready a Wok block',
     rattrap:'Set a rat trap',pelican:'Send the pelican',delivery:'Take top bins rat',recycle:'Recycle a discard',
     exterm:'Exterminate a rat',inherit:'Place Inheritance',gambit:'Look at top 3',klepto:'Lift a card',shakedown:'Shake down for a card',

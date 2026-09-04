@@ -9,7 +9,6 @@ const COLOURS = ['red', 'blue', 'green'];
 const THRESHOLD = 6;   // Rat King win at weight 6 (restored from 5)   // weight to win
 const STARS = 4;
 const HAND = 7;
-const ALPHA_COLOURS = 4;   // Alpha shows on all 4 colours (big inspection target)
 
 
 // ── rat catalogue ────────────────────────────────────────────────────────
@@ -28,7 +27,8 @@ const RATS = {
   larder: { name: 'Larder Rat', w: 1, heat: 1, prop: 'free_eat',    col: true,  desc: 'May eat itself for free — stars equal to its weight.' },
   grub:   { name: 'Grub Rat',   w: 1, heat: 2, prop: null,          col: true,  desc: 'Cheap stock but runs hot — weight 1, heat 2. A liability when the inspector calls.' },
   breeder:{ name: 'Breeder Rat',w: 1, heat: 1, prop: 'breed',        col: true,  desc: 'While in your kitchen, once per turn you may spend 2 Food to take the TOP rat of the bins into your kitchen. A slow engine — the Food it eats is Food you can\'t heal with.' },
-  ratato: { name: 'Ratato Rat', w: 0, heat: 1, prop: 'sabotage',    col: true,  desc: 'No weight — worthless as stock, but carries heat. Play it into a RIVAL kitchen to draw the inspector eye. Never your own.' },
+  ratato: { name: 'Ratato Rat', w: 0, heat: 1, prop: null,        col: true,  desc: 'Weight 0, heat 1. Drawn straight into YOUR kitchen — worthless stock that still draws the inspector eye.' },
+  hotrat: { name: 'Hot Ratato', w: 0, heat: 1, prop: 'sabotage',  col: true,  desc: 'Weight 0, heat 1. Held in hand, then thrown into a RIVAL kitchen — all heat, no value. Never your own.' },
 };
 
 // action card catalogue: type -> {name, cls}
@@ -39,7 +39,7 @@ const CARDS = {
   poach:       { name: 'Poach',           cls: 'attack', desc: 'Steal one weight-1 rat from a rival. Blocked by Boiler, and by any rat in an Alpha-guarded kitchen.' },
   switch:      { name: 'Switcheroo',      cls: 'attack', desc: 'Swap one of your rats for a rival-s, regardless of weight.' },
   chilli:      { name: 'Hot Chilli',      cls: 'attack', desc: 'Place on a rival-s rat (not Spice). It explodes at the start of your next turn — rat to the bins.' },
-  hotratato:   { name: 'Hot Ratato',      cls: 'attack', desc: 'Dump any one of your rats into a rival kitchen — offload its heat onto them.' },
+  hotratato:   { name: 'Ratata Quente',   cls: 'attack', desc: 'Dump any one of your rats into a rival kitchen — offload its heat onto them.' },
   grease:      { name: 'Grease the Palm', cls: 'attack', desc: 'Discard a rival-s armed Scheduled inspection before it fires.' },
   klepto:      { name: 'Kleptomaniac',    cls: 'attack', desc: 'Steal one card at random from any opponent-s hand.' },
   shakedown:   { name: 'Shakedown',       cls: 'attack', desc: 'Name a card. If that opponent holds it, they must give you one.' },
@@ -50,7 +50,7 @@ const CARDS = {
   cat:         { name: 'Cat',             cls: 'buff', desc: 'Play on one of your rats (not Fat or Alpha) to shield it — blocks the next single attack on that rat.' },
   lastresort:  { name: 'Last Resort',     cls: 'buff', desc: 'Eat any one of your rats and regain stars equal to its weight.' },
   delivery:    { name: 'Special Delivery',cls: 'engine', desc: 'Take the TOP rat of the bins into your kitchen. Never choose.' },
-  pelican:     { name: 'Pelican Delivery',cls: 'engine', desc: 'Place on any kitchen — yours or a rival\'s. At the start of your next turn the pelican drops the TOP rat of the bins into it. A gift, or a problem, depending where you aim it.' },
+  pelican:     { name: 'Pelican Delivery',cls: 'engine', desc: 'Place in YOUR kitchen. At the start of your next turn the pelican drops the TOP rat of the bins into it — a delayed Special Delivery.' },
   recycle:     { name: 'Recycle Day',     cls: 'engine', desc: 'Take any one of the last 3 discarded action cards back into your hand.' },
   rattrap:     { name: 'Rat Trap',        cls: 'engine', desc: 'Place on a rival kitchen. The next rat to enter it is caught — and YOU take it into your kitchen. Springs once; expires at your next turn if nothing walks in.' },
   exterm:      { name: 'Exterminator',    cls: 'engine', desc: 'Remove any one rat — yours or a rival-s — to the bins. Cool your own heat, or set a rival back.' },
@@ -86,28 +86,42 @@ function deckConfig(P) {
   const mole    = Math.max(2, Math.round(4 * inspScale * HI_MULT));
   const sched1  = 6;
   const sched2  = 6;
-  const wd_snap = 3;      // 1 per colour
+  const wd_snap = 6;      // 2 per colour (was 3) — more draw-tension
   const wd_snap2 = 0;     // built but unused — see potential mechanics
   const wd_mole = 2;
   const actions = {
     mole, sched1, sched2,
     wd_snap, wd_snap2, wd_mole,
-    poach: 5, switch: 3, chilli: 4, hotratato: 4, grease: 3, klepto: 3, shakedown: 3,
-    territorial: 3, wok: 2, boardup: 4,
-    food: 12, cat: 3, lastresort: 3,
-    delivery: 4, pelican: 2, recycle: 3, rattrap: 3, exterm: 3, inherit: 3,
+    poach: 5, switch: 6, chilli: 4, hotratato: 4, grease: 3, klepto: 3, shakedown: 3,
+    territorial: 3, wok: 3, boardup: 4,
+    food: 12, cat: 3, lastresort: 4,
+    delivery: 4, pelican: 3, recycle: 3, rattrap: 3, exterm: 4, inherit: 3,
     gambit: 6,                                             // normal Engine card (was WD x3)
   };
-  const ratatoRats = 5;
+  // ── RATS ─────────────────────────────────────────────────────────────────
+  // ONE canonical set of physical rat cards (fixed counts — no percentages).
+  // 34 colourable + 8 Ratato/Hot Ratato = 42 = exactly 14 per colour.
+  // Sewer (2) is colourless and sits outside the colour split.
+  // Ratato/Hot Ratato are counted separately (4 + 4).
+  const ratMaster = {
+    plain: 9, fat: 6,
+    runner: 2, sow: 2, toll: 2, feral: 2, spice: 2,
+    boiler: 2, larder: 2, grub: 2, breeder: 2,
+    alpha: 1, sewer: 2,
+  };
+  const ratatoRats = 4;   // drawn straight into your own kitchen
+  const hotratRats = 4;   // held in hand, thrown into a rival's
+  // Deck rat count scales DOWN with players: dealing opening hands removes
+  // ~HAND*P action cards from the deck (rats divert to bins), so a bigger table
+  // leaves a smaller, rat-denser deck. Seeding fewer rats holds the in-play
+  // density constant at ~19%. Everything not dealt into the deck goes to bins,
+  // so every rat stays reachable.
   const actionTotal = Object.values(actions).reduce((s, x) => s + x, 0);
-  const TARGET_DENSITY = 0.19;    // deck rat density (plain+fat+ability sprinkle)
-  const totalRats = Math.round(TARGET_DENSITY * actionTotal / (1 - TARGET_DENSITY));
-  const deckRats = Math.max(6, totalRats - ratatoRats);
-  const binSeed = 15;             // deliberate excess — some bin rats never get drawn
-  const reshuffleRats = 7;        // plain/fat rats reclaimed from bins at each reshuffle
-  const fatShare = 0.15;          // deck rat mix: 30% plain / 15% fat / 55% ability
-  const plainShare = 0.30;
-  return { actions, deckRats, ratatoRats, binSeed, reshuffleRats, fatShare, plainShare };
+  const TARGET_DENSITY = 0.19;
+  const afterDeal = Math.max(20, actionTotal - HAND * P);
+  const deckRats = Math.max(6, Math.round(TARGET_DENSITY * afterDeal / (1 - TARGET_DENSITY)));
+  const reshuffleRats = 7;        // rats reclaimed from bins at each reshuffle
+  return { actions, ratMaster, deckRats, ratatoRats, hotratRats, reshuffleRats };
 }
 
 // ── Market Day event pool (start-of-round events) ──────────────────────────
@@ -128,16 +142,10 @@ function rid() { return Math.random().toString(36).slice(2, 9); }
 
 function makeRat(kind, colour) {
   const d = RATS[kind];
-  const r = {
+  return {
     id: rid(), kind, name: d.name, w: d.w, heat: d.heat,
     prop: d.prop, col: d.col ? colour : null,
   };
-  if (kind === 'alpha') {
-    const shuf = COLOURS.slice().sort(() => Math.random() - 0.5);
-    r.cols = shuf.slice(0, ALPHA_COLOURS);
-    r.col = r.cols[0];
-  }
-  return r;
 }
 
 // Build a colour-balanced rat pool (heat balanced 4/4/4/4 per spec 5.3).
@@ -178,71 +186,30 @@ function assignScheduledColours(cards) {
   }
 }
 
-function buildRatPool(n, opts) {
-  opts = opts || {};
-  // ── mix selection ──────────────────────────────────────────────────────
-  // 'deck': 30% Street / 15% Fat / 55% ability rats — the shuffled main deck.
-  // 'bins': a heavier ability concentration plus the deck-excluded exclusives
-  //         (Sewer; Alpha is added separately, guaranteed exactly once). Pulling
-  //         from the bins therefore stays a genuine bonus over a deck draw.
-  //         'all': legacy full mix, kept only for isolation testing.
-  let mix;
-  if (opts.mixSource === 'deck') {
-    // Deck rat mix (Koko-specified): ~30% Street (plain), ~15% Fat, the
-    // remaining ~55% spread across the ability rats. The bins still hold a
-    // heavier ability concentration plus the deck-excluded exclusives
-    // (Sewer, Alpha), so pulling from the bins stays a genuine bonus.
-    const plainShare = opts.plainShare != null ? opts.plainShare : 0.30;
-    const fatShare = opts.fatShare != null ? opts.fatShare : 0.15;
-    const abilityShare = Math.max(0, 1 - plainShare - fatShare);
-    const ability = [
-      ['runner', 1], ['sow', 1], ['toll', 1], ['feral', 1],
-      ['spice', 1], ['boiler', 1], ['larder', 1], ['grub', 1], ['breeder', 0.5],
-    ];
-    const aTot = ability.reduce((s, [, w]) => s + w, 0);
-    mix = [['plain', plainShare], ['fat', fatShare],
-           ...ability.map(([k, w]) => [k, abilityShare * w / aTot])];
-  } else if (opts.mixSource === 'bins') {
-    const raw = [
-      ['runner', 0.15], ['sow', 0.05], ['sewer', 0.12], ['toll', 0.10],
-      ['feral', 0.10], ['spice', 0.08], ['boiler', 0.08], ['larder', 0.07], ['grub', 0.13],
-      ['breeder', 0.06],
-    ];
-    const tot = raw.reduce((s, [, w]) => s + w, 0);
-    mix = raw.map(([k, w]) => [k, w / tot]);
-  } else {
-    // legacy 'all' mix (pre-split; isolation-test only)
-    mix = [
-      ['plain', 0.22], ['runner', 0.15], ['fat', 0.12], ['sow', 0.04],
-      ['alpha', 0.06], ['sewer', 0.10], ['toll', 0.08], ['feral', 0.08],
-      ['spice', 0.06], ['boiler', 0.05], ['larder', 0.04], ['grub', 0.10],
-    ];
-  }
-  // 1) pick types
-  const picked = [];
-  for (let i = 0; i < n; i++) {
-    let r = Math.random(), pick = 'plain';
-    for (const [k, wgt] of mix) { r -= wgt; if (r <= 0) { pick = k; break; } }
-    picked.push(pick);
-  }
-  // 2) assign colours to EQUALISE total heat per colour (§5.2).
-  //    Colourless rats (Sewer) skip. Greedily place each coloured rat on the
-  //    colour with the least heat so far — random tie-break — so heat is even
-  //    but which rats land where is effectively random.
-  const heatByCol = { red:0, blue:0, green:0, yellow:0 };
+// Build the full canonical rat set from the master list. Counts are FIXED —
+// no percentages. Colours are assigned to equalise BOTH count and heat per
+// colour (33 colourable rats = exactly 11 each). Sewer is colourless.
+function buildAllRats(ratMaster) {
+  const kinds = [];
+  for (const [kind, count] of Object.entries(ratMaster))
+    for (let i = 0; i < count; i++) kinds.push(kind);
+  shuffle(kinds);
+  // Split colourable rats into an EXACT even colour allocation: build a pool of
+  // colour slots (n/3 of each, remainder spread round-robin), shuffle it, and
+  // deal one slot per rat. Guarantees the population is colour-balanced every
+  // game, with heat evening out naturally since the kinds are shuffled first.
+  const colourable = kinds.filter(k => RATS[k].col !== false);
+  const colourless = kinds.filter(k => RATS[k].col === false);
+  const nc = COLOURS.length;
+  const per = Math.floor(colourable.length / nc);
+  const slots = [];
+  for (const c of COLOURS) for (let i = 0; i < per; i++) slots.push(c);
+  let rem = colourable.length - slots.length, ci = Math.floor(Math.random() * nc);
+  while (rem-- > 0) { slots.push(COLOURS[ci % nc]); ci++; }
+  shuffle(slots);
   const pool = [];
-  // shuffle order so assignment isn't type-ordered
-  for (let i = picked.length - 1; i > 0; i--) { const j = Math.floor(Math.random()*(i+1)); [picked[i],picked[j]]=[picked[j],picked[i]]; }
-  for (const kind of picked) {
-    const d = RATS[kind];
-    if (d.col === false) { pool.push(makeRat(kind, null)); continue; }
-    // choose the lowest-heat colour, random among ties
-    let min = Infinity; for (const c of COLOURS) min = Math.min(min, heatByCol[c]);
-    const cands = COLOURS.filter(c => heatByCol[c] === min);
-    const colour = cands[Math.floor(Math.random()*cands.length)];
-    heatByCol[colour] += d.heat;
-    pool.push(makeRat(kind, colour));
-  }
+  colourable.forEach((kind, i) => pool.push(makeRat(kind, slots[i])));
+  for (const kind of colourless) pool.push(makeRat(kind, null));
   return pool;
 }
 
@@ -294,18 +261,24 @@ function newGame(playerDefs) {
     c.cols = [COLOURS[i % COLOURS.length], COLOURS[(i + 1) % COLOURS.length]];
     deck.push(c);
   });
-  // ── DECK rats: plain + fat ONLY. Every ability rat lives in the bins —
-  // pulling from the bins (Special Delivery, the Rat Release market event)
-  // is a genuine bonus over a plain deck draw, not just a shortcut.
-  for (const r of buildRatPool(cfg.deckRats, { mixSource: 'deck', fatShare: cfg.fatShare, plainShare: cfg.plainShare })) deck.push({ id: r.id, rat: r });
-  // Ratato Rats (0 weight, 1 heat) — held in hand, not "kitchen stock" in the
-  // plain/fat sense, so they stay in the shuffled deck alongside action cards.
-  for (let i = 0; i < cfg.ratatoRats; i++) deck.push({ id: rid(), rat: makeRat('ratato', COLOURS[i % COLOURS.length]) });
+  // ── RATS: one master set, shuffled, then split ───────────────────────────
+  // deckRats go into the shuffled deck; EVERYTHING ELSE goes to the bins, so
+  // every rat in the set stays reachable. Which specific rats land in the deck
+  // vs the bins is random each game — only the counts are fixed.
+  // Ratato and Hot Ratato are folded into the same colour-balancing pass so
+  // the whole rat population splits evenly across the three colours.
+  const fullMaster = Object.assign({}, cfg.ratMaster,
+    { ratato: cfg.ratatoRats, hotrat: cfg.hotratRats });
+  const allRats = shuffle(buildAllRats(fullMaster));
+  // Ratato/Hot Ratato always ride in the deck (they're drawn, not stocked);
+  // the rest split deck/bins by the density-scaled count.
+  const special = allRats.filter(r => r.kind === 'ratato' || r.kind === 'hotrat');
+  const normal  = allRats.filter(r => r.kind !== 'ratato' && r.kind !== 'hotrat');
+  for (const r of special) deck.push({ id: r.id, rat: r });
+  for (const r of normal.slice(0, cfg.deckRats)) deck.push({ id: r.id, rat: r });
   shuffle(deck);
 
-  // ── BINS: every ability rat (runner/sow/sewer/toll/feral/spice/boiler/
-  // larder/grub) seeded here, never in the shuffled deck.
-  const bins = buildRatPool(cfg.binSeed, { mixSource: 'bins' }).map(r => ({ id: r.id, rat: r }));
+  const bins = normal.slice(cfg.deckRats).map(r => ({ id: r.id, rat: r }));
 
   const g = {
     players, deck, bins, discard: [], P,
@@ -324,18 +297,13 @@ function newGame(playerDefs) {
     _firstElimTurn: null, // g.turn value at the first-ever elimination this game
   };
 
-  // Alpha Rat: guaranteed exactly one copy, placed in the BINS (not the deck —
-  // it's an ability rat like the rest). Reached via Special Delivery / Rat
-  // Release, same as every other special rat.
-  {
-    const strip = arr => arr.filter(x => !(x.rat && x.rat.kind === 'alpha'));
-    g.deck = strip(g.deck); g.bins = strip(g.bins);
-    const alpha = makeRat('alpha', COLOURS[Math.floor(Math.random()*COLOURS.length)]);
-    const at = Math.floor(Math.random() * (g.bins.length + 1));
-    g.bins.splice(at, 0, { id: alpha.id, rat: alpha });
-  }
+  // (Alpha is part of the master rat set — exactly 1 copy, landing in either
+  // the deck or the bins at random like every other rat.)
 
-  // deal hands (guarantee 1 Food each, rest from deck non-rats)
+  // deal hands (guarantee 1 Food each, rest from deck; rats and When-Drawn
+  // cards can't sit in an opening hand — rats go to the bins, WD cards are set
+  // aside and reshuffled back so they only ever fire when drawn in play).
+  const setAside = [];
   for (const p of players) {
     p.hand.push({ id: rid(), card: 'food' });
     let dealt = 0;
@@ -343,9 +311,13 @@ function newGame(playerDefs) {
       const c = drawCard(g);
       if (!c) break;
       if (c.rat) { g.bins.push(c); }
+      else if (c.card === 'wd_snap' || c.card === 'wd_snap2' || c.card === 'wd_mole') { setAside.push(c); }
       else { p.hand.push(c); dealt++; }
     }
   }
+  // shuffle the set-aside WD cards back into the deck
+  for (const c of setAside) g.deck.push(c);
+  shuffle(g.deck);
   logAdd(g, `Game start — ${P} players, first to weight ${THRESHOLD} wins.`);
   return g;
 }
@@ -377,11 +349,7 @@ function logAdd(g, msg) { g.log.push(msg); if (g.log.length > 60) g.log.shift();
 
 // ── stat helpers ───────────────────────────────────────────────────────────
 const weight = p => p.rats.reduce((s, r) => s + r.w, 0);
-// Alpha must be held one full round before it can complete a win.
-const winWeight = (p, turn) => p.rats.reduce((s, r) => {
-  if (r.kind === 'alpha' && r._enteredTurn === turn) return s; // not yet counted
-  return s + r.w;
-}, 0);
+const winWeight = (p) => weight(p);   // Alpha has no special win role; weight is weight
 const heat   = p => p.rats.reduce((s, r) => s + r.heat, 0);
 const ratOnCol = (r, cols) => r.cols ? r.cols.some(c => cols.includes(c)) : cols.includes(r.col);
 const heatOf = (p, cols) => p.rats.reduce((s, r) => s + (ratOnCol(r, cols) ? r.heat : 0), 0);
@@ -407,7 +375,7 @@ function ratEnters(g, p, rat) {
     }
     return false;
   }
-  if (rat.kind === 'alpha') rat._enteredTurn = g.turn;
+  
   p.rats.push(rat);
   return true;
 }
@@ -475,23 +443,24 @@ function eliminate(g, t) {
   logAdd(g, `${t.name} is shut down!`);
 }
 
-function alphaWin(p, turn) {
-  const alpha = p.rats.find(r => r.kind === 'alpha');
-  if (!alpha) return false;
-  if (alpha._enteredTurn === turn) return false;      // hold-one-round
-  return p.rats.length >= 4;  // Alpha wins with 4 rats total (itself + 3), any weights
-}
-
+// Alpha is a defensive rat only — no win condition. While it's in a kitchen,
+// none of that kitchen's rats can be Poached (see ratEnters/poach handling).
 function checkWin(g, p) {
-  if (p.alive && (winWeight(p, g.turn) >= THRESHOLD || alphaWin(p, g.turn))) {
+  if (p.alive && winWeight(p, g.turn) >= THRESHOLD) {
     g.over = true; g.winner = p.id;
     logAdd(g, `${p.name} becomes RAT KING with weight ${weight(p)}!`);
     return true;
   }
   const alive = g.players.filter(x => x.alive);
-  if (alive.length <= 1) {
+  if (alive.length <= 1 && g.players.length > 1) {
     g.over = true; g.winner = alive[0] ? alive[0].id : null;
-    if (alive[0]) logAdd(g, `${alive[0].name} is the last kitchen standing.`);
+    if (alive[0]) {
+      // Only call it "last kitchen standing" if eliminations actually happened.
+      const anyElim = g._firstElimTurn != null;
+      logAdd(g, anyElim
+        ? `${alive[0].name} is the last kitchen standing — everyone else was shut down!`
+        : `${alive[0].name} wins.`);
+    }
     return true;
   }
   return false;
@@ -499,7 +468,7 @@ function checkWin(g, p) {
 
 module.exports = {
   COLOURS, THRESHOLD, STARS, HAND, RATS, CARDS,
-  newGame, drawCard, weight, winWeight, alphaWin, heat, heatOf, hasCol, opponents,
+  newGame, drawCard, weight, winWeight, heat, heatOf, hasCol, opponents,
   ratEnters, ratToBins, fireMole, fireScheduled, tryCat, damage,
   eliminate, checkWin, logAdd, shuffle, rid, makeRat, deckConfig,
   buildMarketDeck, MARKET_EVENTS,
