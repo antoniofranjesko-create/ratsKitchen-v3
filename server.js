@@ -22,7 +22,7 @@ function code() { return Math.random().toString(36).slice(2, 6).toUpperCase(); }
 function project(g, viewerId) {
   return {
     over: g.over, winner: g.winner, active: g.players[g.active] && g.players[g.active].id,
-    turn: g.turn, threshold: E.THRESHOLD, maxStars: E.STARS, anyElim: g._firstElimTurn != null, log: g.log.slice(-14),
+    turn: g.turn, threshold: E.THRESHOLD, maxStars: E.STARS, anyElim: g._firstElimTurn != null, log: g.log.slice(-40),
     lastPlayed: g.lastPlayed || null,
     awaitingStep: (() => {
       // a step is available when the game isn't over, it's a bot's turn coming up,
@@ -41,7 +41,7 @@ function project(g, viewerId) {
       id: p.id, name: p.name, bot: p.bot, alive: p.alive,
       stars: p.stars, weight: E.weight(p), heat: E.heat(p), count: p.rats.length,
       // rats are public (zones are public) — show kind + colour, no ids to others
-      rats: p.rats.map(r => ({ kind: r.kind, name: r.name, w: r.w, heat: r.heat, col: r.col, cols: r.cols||null, prop: r.prop, desc: (E.RATS[r.kind]&&E.RATS[r.kind].desc)||"", shielded: !!r._catShield, chilli: !!r._chilliBy })),
+      rats: p.rats.map(r => ({ id: r.id, kind: r.kind, name: r.name, w: r.w, heat: r.heat, col: r.col, cols: r.cols||null, prop: r.prop, desc: (E.RATS[r.kind]&&E.RATS[r.kind].desc)||"", shielded: !!r._catShield, chilli: !!r._chilliBy })),
       armed: p.armed ? { cap: p.armed.cap, ready: p.armed.age >= 1, cols: (p.id === viewerId ? (p.armed.cols||null) : null) } : null,
       boardup: p.boardup, territorial: p.territorial,
       // Layer 3: cards sitting ON this kitchen, with who played them (for the layered display)
@@ -168,15 +168,19 @@ io.on('connection', (socket) => {
     const room = rooms[myRoom]; if (!room || !room.game || room.game.over) return;
     const g = room.game;
     if (g.players[g.active].id !== myId) return;
-    // reveal (don't remove) the top 3 cards for the picker
+    // reveal (don't remove) the top 3 cards for the picker. When-Drawn cards
+    // are shown but flagged unkeepable — they fire the moment they're drawn, so
+    // they can never be taken into hand.
+    const isWD = k => k === 'wd_snap' || k === 'wd_snap2' || k === 'wd_mole';
     const top = g.deck.slice(-3).reverse().map(c => {
       if (c.rat) return { id: c.rat.id, isRat:true, name: c.rat.name, col: c.rat.col, w:c.rat.w, heat:c.rat.heat };
-      const d = E.CARDS[c.card]||{}; return { id: c.id, card:c.card, name: d.name||c.card, sub:d.sub||null, cls:d.cls||'drawn', desc:d.desc||'' };
+      const d = E.CARDS[c.card]||{};
+      return { id: c.id, card:c.card, name: d.name||c.card, sub:d.sub||null, cls:d.cls||'drawn', desc:d.desc||'', unkeepable: isWD(c.card) };
     });
     socket.emit('gambitPeek', { cardId: id, options: top });
   });
 
-  socket.on('act', ({ type, id, target, ratId, cols, named, pickId, keepId }) => {
+  socket.on('act', ({ type, id, target, ratId, theirRatId, cols, named, pickId, keepId }) => {
     const room = rooms[myRoom]; if (!room || !room.game || room.game.over) return;
     const g = room.game;
     if (g.players[g.active].id !== myId) return;
@@ -189,6 +193,7 @@ io.on('connection', (socket) => {
     if (named) act.named = named;
     if (pickId) act.pickId = pickId;
     if (keepId) act.keepId = keepId;
+    if (theirRatId) act.theirRatId = theirRatId;
     A.apply(g, p, act, target, ratId);
     if (g.over) { broadcast(room); return; }
     // Unlimited card play: the turn ends ONLY when the player chooses to end it.
@@ -228,7 +233,7 @@ io.on('connection', (socket) => {
   });
 });
 
-const VERSION = '3.9.0';
+const VERSION = '3.9.3';
 app.get('/version', (req, res) => res.json({ version: VERSION }));
 
 const PORT = process.env.PORT || 3000;

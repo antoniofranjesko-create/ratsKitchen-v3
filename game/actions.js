@@ -20,6 +20,9 @@ function startTurn(g) {
   const p = g.players[g.active];
   if (!p.alive) return;   // market effect eliminated the active player pre-turn
   p.turns++;
+  // Turn header — the client styles lines starting with '▸' as a heading, so
+  // the log reads as grouped turns rather than one undifferentiated stream.
+  E.logAdd(g, `▸ Round ${g._round} · ${p.name}'s turn`);
   p._actedAttack = false;
   p._actedBuild = false;
   p._plays = 0;           // play counter (unlimited play — retained for telemetry / optional future cap)
@@ -256,17 +259,17 @@ function legalActions(g, p) {
     // ---- poach: weight-1 rat, not Boiler, not in an Alpha-guarded kitchen ----
     if (t === 'poach' && true && canGainRat(p)) {
       const vics = freeZones(opps).filter(o => !o.rats.some(r => r.prop === 'alpha_guard') && o.rats.some(r => r.prop !== 'no_steal' && r.prop !== 'alpha_guard' && r.w <= 1));
-      if (vics.length) push({ id: c.id, type: t, needsTarget: true, targets: vics.map(o => o.id), label: 'Poach a rat' });
+      if (vics.length) push({ id: c.id, type: t, needsTarget: true, needsRat: 'target', targets: vics.map(o => o.id), label: 'Poach a rat' });
     }
     // ---- switcheroo ----
     if (t === 'switch' && true && p.rats.length) {
       const vics = freeZones(opps).filter(o => o.rats.some(r => r.prop !== 'no_steal'));
-      if (vics.length) push({ id: c.id, type: t, needsTarget: true, targets: vics.map(o => o.id), label: 'Switcheroo (swap 1 rat)' });
+      if (vics.length) push({ id: c.id, type: t, needsTarget: true, needsRat: 'both', targets: vics.map(o => o.id), label: 'Switcheroo (swap 1 rat)' });
     }
     // ---- hot chilli: PLACE on a rival's rat (not Spice), detonates next turn ----
     if (t === 'chilli' && true) {
       const vics = freeZones(opps).filter(o => o.rats.some(r => r.prop !== 'no_explode' && !r._chilliBy));
-      if (vics.length) push({ id: c.id, type: t, needsTarget: true, targets: vics.map(o => o.id), label: 'Hot Chilli (place on a rat)' });
+      if (vics.length) push({ id: c.id, type: t, needsTarget: true, needsRat: 'target', targets: vics.map(o => o.id), label: 'Hot Chilli (place on a rat)' });
     }
     // ---- territorial: place on a rival kitchen ----
     if (t === 'territorial' && true) { const tg=freeZones(opps); if(tg.length) push({ id: c.id, type: t, needsTarget: true, targets: tg.map(o => o.id), label: 'Territorial' }); }
@@ -322,10 +325,24 @@ function legalActions(g, p) {
 
   // fire armed inspection (free, on your turn). Colours are FIXED on the card, so
   // you may fire at ANY opponent — it whiffs for 0 if they lack the card's colours.
+  if (p.armed && p.armed.age < 1) {
+    // armed this turn — it can only fire from your NEXT turn onward
+    push({ type: 'fire_wait', disabled: true, label: 'Inspection arms now — fires from your next turn' });
+  }
   if (p.armed && p.armed.age >= 1) {
     const colsLabel = (p.armed.cols || []).join('/');
+    const blocked = E.opponents(g, p).filter(o => o.boardup > 0 || p._hitZones[o.id]);
     const legal = E.opponents(g, p).filter(o => o.boardup === 0 && !p._hitZones[o.id]);
-    if (legal.length) push({ type: 'fire', needsTarget: true, targets: legal.map(o => o.id), label: `Fire Inspection (${colsLabel})` });
+    if (!legal.length && blocked.length) {
+      push({ type: 'fire_blocked', disabled: true,
+             label: blocked.some(o => o.boardup > 0)
+               ? 'No target — rivals are boarded up or already hit this turn'
+               : 'No target — you already hit those kitchens this turn' });
+    }
+    if (legal.length) push({ type: 'fire', needsTarget: true, targets: legal.map(o => o.id),
+                             // 2-colour cards: choose ONE of the printed colours at fire time
+                             pickOneCol: (p.armed.cols && p.armed.cols.length > 1) ? p.armed.cols.slice() : null,
+                             label: `Fire Inspection (${colsLabel})` });
   }
   // 2 Food -> 1 star
   if (!capped && p.hand.filter(c => c.card === 'food').length >= 2 && p.stars < E.STARS)
@@ -416,8 +433,16 @@ function apply(g, p, act, targetId, ratId) {
       E.logAdd(g, `${p.name} arms a ${cap === 2 ? '2' : '1'}-colour Health Inspection (${cols.join('/')}).`); break;
     }
     case 'fire': {
-      // damage uses the card's FIXED colours — if the target lacks them, it whiffs for 0
-      const cols = (p.armed && p.armed.cols) ? p.armed.cols : [];
+      // A 2-colour Scheduled card is FLEXIBLE, not stronger: at fire time you
+      // pick ONE of its two printed colours to inspect. act.cols carries the
+      // choice; with none given (bots) pick whichever hurts the target most.
+      const printed = (p.armed && p.armed.cols) ? p.armed.cols : [];
+      let cols = printed;
+      if (printed.length > 1) {
+        const chosen = act.cols && act.cols.length ? act.cols[0] : null;
+        if (chosen && printed.includes(chosen)) cols = [chosen];
+        else cols = [printed.slice().sort((a, b) => E.heatOf(t, [b]) - E.heatOf(t, [a]))[0]];
+      }
       p.armed = null;
       E.fireScheduled(g, p, t, cols);
       if (t && t.id !== p.id) { if(!p._hitZones) p._hitZones={}; p._hitZones[t.id] = true; }
@@ -425,8 +450,9 @@ function apply(g, p, act, targetId, ratId) {
     }
     case 'poach': {
       bin(takeCard(act.id));
-const pool = t.rats.filter(r => r.prop !== 'no_steal' && r.w <= 1);
-      const r = pool.sort((a, b) => b.w - a.w)[0];
+      const pool = t.rats.filter(r => r.prop !== 'no_steal' && r.w <= 1);
+      // honour the player's chosen rat when given; else auto-pick the best
+      const r = (ratId && pool.find(x => x.id === ratId)) || pool.slice().sort((a, b) => b.w - a.w)[0];
       if (r && E.tryCat(g, t, r)) { E.logAdd(g, `${t.name}'s Cat shields the ${r.name}.`); p._actedAttack = true; break; }
       if (r) { t.rats = t.rats.filter(x => x.id !== r.id); if (E.ratEnters(g, p, r)) p._ratsIn++; E.logAdd(g, `${p.name} poaches a ${r.name} from ${t.name}.`); }
       p._actedAttack = true; break;
@@ -445,9 +471,12 @@ const pool = t.rats.filter(r => r.prop !== 'no_steal' && r.w <= 1);
     }
     case 'switch': {
       bin(takeCard(act.id));
-const theirs = t.rats.filter(r => r.prop !== 'no_steal').sort((a, b) => b.w - a.w)[0];
+      const tpool = t.rats.filter(r => r.prop !== 'no_steal');
+      // act.theirRatId = the rival rat you want; ratId = which of yours to give
+      const theirs = (act.theirRatId && tpool.find(x => x.id === act.theirRatId))
+                     || tpool.slice().sort((a, b) => b.w - a.w)[0];
       if (theirs && E.tryCat(g, t, theirs)) { E.logAdd(g, `${t.name}'s Cat shields the ${theirs.name}.`); p._actedAttack = true; break; }
-      const mine = p.rats.slice().sort((a, b) => a.w - b.w)[0];
+      const mine = (ratId && p.rats.find(x => x.id === ratId)) || p.rats.slice().sort((a, b) => a.w - b.w)[0];
       if (theirs && mine) {
         p.rats = p.rats.filter(x => x.id !== mine.id);
         t.rats = t.rats.filter(x => x.id !== theirs.id);
@@ -458,7 +487,8 @@ const theirs = t.rats.filter(r => r.prop !== 'no_steal').sort((a, b) => b.w - a.
     }
     case 'chilli': {
       bin(takeCard(act.id));
-      const r = t.rats.filter(x => x.prop !== 'no_explode' && !x._chilliBy).sort((a, b) => b.w - a.w)[0];
+      const cpool = t.rats.filter(x => x.prop !== 'no_explode' && !x._chilliBy);
+      const r = (ratId && cpool.find(x => x.id === ratId)) || cpool.slice().sort((a, b) => b.w - a.w)[0];
       if (r && E.tryCat(g, t, r)) { E.logAdd(g, `${t.name}'s Cat shields the ${r.name} from the chilli.`); p._actedAttack = true; break; }
       if (r) { r._chilliBy = p.id; E.logAdd(g, `${p.name} plants a Hot Chilli on ${t.name}'s ${r.name} — it blows next turn.`); }
       p._actedAttack = true; break;
@@ -565,6 +595,7 @@ const theirs = t.rats.filter(r => r.prop !== 'no_steal').sort((a, b) => b.w - a.
       if (c) resolveDraw(g, p, c, true);
       E.logAdd(g, `${p.name} works the Sow for an extra draw.`); break;
     }
+    case 'fire_wait': case 'fire_blocked': break;   // display-only hints
     case 'end': break;
   }
   E.checkWin(g, p);
@@ -639,7 +670,7 @@ function botChoose(g, p, acts) {
   const gap = THRESHOLD - E.weight(p);
   const iLead = !lead || E.weight(p) >= E.weight(lead);
   const threat = threatTo(g, p);
-  const has = (type) => acts.find(a => a.type === type);
+  const has = (type) => acts.find(a => a.type === type && !a.disabled);
 
   // 1. fire armed inspection if it hits someone dangerous
   if (has('fire')) return has('fire');

@@ -157,7 +157,19 @@ button:disabled{opacity:.35;cursor:not-allowed}
 .panel{background:var(--stall);border:1px solid var(--line);border-radius:6px;overflow:hidden}
 .panel-h{font-family:'Barlow Condensed';letter-spacing:2px;text-transform:uppercase;font-size:11px;
   color:var(--lamp-dim);padding:9px 12px;border-bottom:1px solid var(--line);background:var(--grease)}
-.log{font-family:'JetBrains Mono';font-size:11px;line-height:1.65;color:var(--bone-dim);padding:10px 12px;max-height:340px;overflow:auto}
+.log{font-family:'JetBrains Mono';font-size:11px;line-height:1.7;color:var(--bone-dim);padding:10px 12px;max-height:340px;overflow:auto}
+.log .lg-turn{margin:10px 0 4px;padding:3px 8px;border-left:2px solid var(--lamp);
+  background:rgba(232,161,60,.10);color:var(--lamp);font-family:'Barlow Condensed';
+  font-size:12px;letter-spacing:1.2px;text-transform:uppercase;font-weight:700}
+.log .lg-turn:first-child{margin-top:0}
+.log .lg-market{margin:10px 0 4px;padding:4px 8px;border-left:2px solid var(--c-control);
+  background:rgba(150,110,200,.12);color:var(--bone);font-family:'Barlow Condensed';
+  font-size:12px;letter-spacing:1px;text-transform:uppercase;font-weight:700}
+.log .lg-line{padding:1px 0 1px 10px}
+.log .lg-hit{color:var(--danger)}
+.log .lg-good{color:var(--c-buff)}
+.log b{color:var(--bone);font-weight:700}
+.log .lg-num{color:var(--lamp);font-weight:700}
 .log div{padding:3px 0;border-bottom:1px solid rgba(58,44,34,.5)}
 .log div:last-child{border:none;color:var(--bone)}
 .pool{display:flex;gap:14px;padding:12px;font-family:'Barlow Condensed';letter-spacing:1px}
@@ -269,7 +281,7 @@ button:disabled{opacity:.35;cursor:not-allowed}
 <body>
 <div class="topbar">
   <div class="brand">RAT'S <b>KITCHEN</b></div>
-  <div class="meta"><span class="build">BUILD v3.9.0</span></div>
+  <div class="meta"><span class="build">BUILD v3.9.3</span></div>
 </div>
 
 <div id="lobby" class="wrap">
@@ -418,6 +430,14 @@ function render(){
           await shakedownName(a, tid);
         } else if(then==='exterm'){
           await extermRat(a, tid);
+        } else if(then==='targetRat'){
+          await pickTargetRat(a, tid);
+        } else if(then==='switchRats'){
+          await pickSwitchRats(a, tid);
+        } else if(then==='myRat'){
+          await pickMyRat(a, tid);
+        } else if(then==='fireCol'){
+          await pickFireColour(a, tid);
         } else {
           send(a,tid,null);
         }
@@ -459,16 +479,20 @@ function render(){
     const cols=(meP.armed.cols||[]).map(c=>({red:'🔴',blue:'🔵',green:'🟢',yellow:'🟡'}[c]||c)).join('');
     $('dockPrompt').innerHTML = `<span class="fireWarn">⚠ FIRE YOUR INSPECTION ${cols} NOW — it expires at end of this turn!</span>`;
   } else if(meActive && STATE.justDrew && STATE.justDrew.length){
+    // Say WHERE the drawn card went — a rat goes to your kitchen and a Snap
+    // fires immediately, so neither reaches your hand. Without this it reads
+    // as "I didn't draw anything".
     const drew=STATE.justDrew.map(d=>{
-      if(d.isRat) return `${d.name}${d.held?' (held)':''}`;
-      return d.name;
+      if(d.isRat) return `${d.name}${d.held?' → held in hand':' → into your kitchen'}`;
+      if(/Snap/.test(d.name)) return `${d.name} → fired on you!`;
+      return `${d.name} → to hand`;
     }).join(', ');
-    $('dockPrompt').innerHTML = `<span class="drewnote">↓ You drew: <b>${esc(drew)}</b></span> · your turn`;
+    $('dockPrompt').innerHTML = `<span class="drewnote">↓ You drew: <b>${esc(drew)}</b></span>`;
   } else {
     $('dockPrompt').textContent = STATE.over ? '' : (meActive ? 'Your turn — play a card or act' : waitingMsg());
   }
   renderActions(meActive);
-  $('log').innerHTML=STATE.log.map(l=>`<div>${esc(l)}</div>`).join('');
+  $('log').innerHTML=STATE.log.map(l=>formatLog(l)).join('');
   $('log').scrollTop=$('log').scrollHeight;
   if(STATE.over){
     const w=STATE.players.find(p=>p.id===STATE.winner);
@@ -482,6 +506,31 @@ function render(){
     }
     $('winnerHow').textContent=how;
   }else $('winner').classList.add('hidden');
+}
+// Turn the flat log strings into readable, grouped entries: turn headers and
+// Market Days become headings; player names are bolded; damage/gain coloured.
+function formatLog(line){
+  if(line.startsWith('\u25B8')){                    // turn header
+    return `<div class="lg-turn">${esc(line.slice(1).trim())}</div>`;
+  }
+  if(line.startsWith('\u2500\u2500')){             // market day
+    return `<div class="lg-market">${esc(line.replace(/^\u2500+\s*/,''))}</div>`;
+  }
+  let t=esc(line);
+  // bold every known player name
+  const names=(STATE.players||[]).map(p=>p.name).sort((a,b)=>b.length-a.length);
+  for(const n of names){
+    if(!n) continue;
+    const rx=new RegExp('(?<![A-Za-z0-9])'+n.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')+'(?![A-Za-z0-9])','g');
+    t=t.replace(rx,'<b>'+esc(n)+'</b>');
+  }
+  // highlight numbers in star/damage phrases
+  t=t.replace(/(-?\d+) star/g,'<span class="lg-num">$1</span> star');
+  t=t.replace(/for (\d+)/g,'for <span class="lg-num">$1</span>');
+  let cls='lg-line';
+  if(/-\d+ star|hits .* for [1-9]|shut down|inspects/.test(line)) cls+=' lg-hit';
+  else if(/RAT KING|wins|takes a|produces|recycles|spends 2 Food/.test(line)) cls+=' lg-good';
+  return `<div class="${cls}">${t}</div>`;
 }
 function waitingMsg(){const a=STATE.players.find(p=>p.id===STATE.active);return a?`Waiting on ${a.name}…`:''}
 
@@ -632,11 +681,13 @@ function renderActions(meActive){
   // no card selected: show free actions + a hint
   html+=`<span style="font-family:'Barlow Condensed';letter-spacing:1px;color:var(--bone-dim);align-self:center;padding:0 6px">tap a card to play it${free.length?', or:':''}</span>`;
   html+=free.map((a,i)=>{
+    // disabled entries are explanatory hints (why you can't fire), not buttons
+    if(a.disabled) return `<span style="font-family:'Barlow Condensed';letter-spacing:1px;color:var(--ash);align-self:center;padding:0 8px">${esc(a.label)}</span>`;
     let cls=''; if(a.type==='fire')cls='fire'; if(a.type==='end'||a.type==='draw_end')cls='end';
     return `<button class="${cls}" data-fi="${i}">${esc(a.label)}</button>`;
   }).join('');
   box.innerHTML=html;
-  [...box.querySelectorAll('[data-fi]')].forEach(b=>b.onclick=()=>choose(free[+b.dataset.fi]));
+  [...box.querySelectorAll('[data-fi]')].forEach(b=>b.onclick=()=>{const a=free[+b.dataset.fi]; if(!a.disabled) choose(a);});
 }
 function playVerb(a,card){
   // friendlier verb than the raw label when a card is already selected
@@ -704,8 +755,19 @@ function choose(a){
   if(a.type==='shakedown'){ picking={act:a,targets:a.targets,msg:'Shakedown — click a stall',then:'shakedown'}; selectedCardId=null; render(); return; }
   // Exterminator: pick a kitchen, then which rat in it to remove
   if(a.type==='exterm'){ picking={act:a,targets:a.targets,msg:'Exterminator — click a kitchen',then:'exterm'}; selectedCardId=null; render(); return; }
+  // Hot Chilli / Poach: pick a kitchen, then WHICH of their rats
+  if(a.type==='chilli'||a.type==='poach'){ picking={act:a,targets:a.targets,msg:(a.type==='chilli'?'Hot Chilli':'Poach')+' — click a kitchen',then:'targetRat'}; selectedCardId=null; render(); return; }
+  // Switcheroo: pick a kitchen, then their rat, then yours
+  if(a.type==='switch'){ picking={act:a,targets:a.targets,msg:'Switcheroo — click a kitchen',then:'switchRats'}; selectedCardId=null; render(); return; }
+  // Ratata Quente: pick a kitchen, then which of YOUR rats to dump
+  if(a.type==='hotratato'){ picking={act:a,targets:a.targets,msg:'Ratata Quente — click a kitchen',then:'myRat'}; selectedCardId=null; render(); return; }
+  // Cat / Last Resort: no target, just pick one of YOUR rats
+  if(a.type==='cat'||a.type==='eat_lastresort'){ selectedCardId=null; ownRatOnly(a); return; }
+  if(a.type==='fire'&&a.pickOneCol){
+    picking={act:a,targets:a.targets,msg:'Fire Inspection — click a kitchen',then:'fireCol'};
+    selectedCardId=null; render(); return;
+  }
   if(a.needsTarget){
-    // fire no longer needs a colour pick — colours are fixed on the card
     picking={act:a,targets:a.targets,msg:pickMsg(a),then:null};
     selectedCardId=null; render(); return;
   }
@@ -760,6 +822,69 @@ async function shakedownName(a, targetId){
   const pick=await modalPick('Demand which card?', ALL_CARD_TYPES.map(([v,l])=>({label:l,value:v})));
   if(pick) socket.emit('act',{type:a.type,id:a.id,target:targetId,named:pick});
 }
+// 2-colour armed inspection: choose WHICH single colour to inspect
+async function pickFireColour(a, targetId){
+  const k=STATE.players.find(x=>x.id===targetId);
+  const LB={red:'🔴 Red',blue:'🔵 Blue',green:'🟢 Green'};
+  const opts=a.pickOneCol.map(c=>{
+    const n=((k&&k.rats)||[]).filter(r=>r.col===c).reduce((s,r)=>s+r.heat,0);
+    return {label:`${LB[c]||c} — hits for ${n}`, value:c};
+  });
+  const pick=await modalPick('Inspect which colour in '+esc(k.name)+"'s kitchen?", opts);
+  if(pick) socket.emit('act',{type:a.type,id:a.id,target:targetId,cols:[pick]});
+  else render();
+}
+function ratOpts(rats){
+  return rats.map(r=>{
+    const dot={red:'🔴',blue:'🔵',green:'🟢'}[r.col]||'⚪';
+    return {label:`${dot} ${esc(r.name)} · w${r.w} h${r.heat}`, value:r.id};
+  });
+}
+// pick one of the TARGET's rats (Hot Chilli, Poach)
+async function pickTargetRat(a, targetId){
+  const k=STATE.players.find(x=>x.id===targetId);
+  let rats=(k&&k.rats)||[];
+  if(a.type==='chilli') rats=rats.filter(r=>r.prop!=='no_explode'&&!r.chilli);
+  if(a.type==='poach')  rats=rats.filter(r=>r.prop!=='no_steal'&&r.w<=1);
+  if(!rats.length){ render(); return; }
+  const verb=a.type==='chilli'?'Plant the chilli on which rat?':'Poach which rat?';
+  const pick=await modalPick(verb+' ('+esc(k.name)+')', ratOpts(rats));
+  if(pick) socket.emit('act',{type:a.type,id:a.id,target:targetId,ratId:pick});
+  else render();
+}
+// pick one of YOUR rats (Ratata Quente)
+async function pickMyRat(a, targetId){
+  const me=STATE.players.find(x=>x.id===YOU);
+  const rats=(me&&me.rats)||[];
+  if(!rats.length){ render(); return; }
+  const pick=await modalPick('Dump which of your rats?', ratOpts(rats));
+  if(pick) socket.emit('act',{type:a.type,id:a.id,target:targetId,ratId:pick});
+  else render();
+}
+// Switcheroo: their rat, then yours
+async function pickSwitchRats(a, targetId){
+  const k=STATE.players.find(x=>x.id===targetId);
+  const me=STATE.players.find(x=>x.id===YOU);
+  const theirs=((k&&k.rats)||[]).filter(r=>r.prop!=='no_steal');
+  const mine=(me&&me.rats)||[];
+  if(!theirs.length||!mine.length){ render(); return; }
+  const t=await modalPick('Take which of '+esc(k.name)+"'s rats?", ratOpts(theirs));
+  if(!t){ render(); return; }
+  const m=await modalPick('Give them which of yours?', ratOpts(mine));
+  if(!m){ render(); return; }
+  socket.emit('act',{type:a.type,id:a.id,target:targetId,ratId:m,theirRatId:t});
+}
+// no-target actions that act on one of your own rats (Cat, Last Resort)
+async function ownRatOnly(a){
+  const me=STATE.players.find(x=>x.id===YOU);
+  let rats=(me&&me.rats)||[];
+  if(a.type==='cat') rats=rats.filter(r=>!r.shielded&&r.kind!=='fat');
+  if(!rats.length){ render(); return; }
+  const msg=a.type==='cat'?'Shield which rat with the Cat?':'Eat which rat? (gain stars = its weight)';
+  const pick=await modalPick(msg, ratOpts(rats));
+  if(pick) socket.emit('act',{type:a.type,id:a.id,ratId:pick});
+  else render();
+}
 async function extermRat(a, targetId){
   const kitchen=STATE.players.find(x=>x.id===targetId);
   const rats=(kitchen&&kitchen.rats)||[];
@@ -782,9 +907,19 @@ function pickMsg(a){
 socket.on('gambitPeek', async ({cardId, options})=>{
   if(!pendingGambit) return;
   const a=pendingGambit; pendingGambit=null;
-  const pick=await modalPick('Gambit — keep one (the other two go back on top)',
-    options.map(o=>({label:o.isRat?`🐀 ${o.name}`:o.name, value:o.id})));
-  if(pick) socket.emit('act',{type:a.type,id:a.id,keepId:pick});
+  // When-Drawn cards fire on draw and can never be held — show them so the
+  // player knows what's coming, but don't let them be chosen.
+  const keepable=options.filter(o=>!o.unkeepable);
+  const wd=options.filter(o=>o.unkeepable);
+  const note=wd.length?` — ${wd.map(o=>esc(o.name)).join(', ')} will fire if drawn`:'';
+  if(!keepable.length){
+    await modalPick('Gambit — nothing keepable up top'+note, [{label:'Put them all back',value:'__none'}]);
+    render(); return;
+  }
+  const pick=await modalPick('Gambit — keep one (the other two go back on top)'+note,
+    keepable.map(o=>({label:o.isRat?`🐀 ${o.name}`:o.name, value:o.id})));
+  if(pick&&pick!=='__none') socket.emit('act',{type:a.type,id:a.id,keepId:pick});
+  else render();
 });
 $('pickerCancel').onclick=()=>{picking=null;render()};
 function send(a,target,ratId){socket.emit('act',{type:a.type,id:a.id,target,ratId})}
