@@ -770,6 +770,9 @@ function botAlleyPick(g) {
 function botTarget(g, p, act) {
   const cands = act.targets.map(id => g.players.find(x => x.id === id)).filter(Boolean);
   if (!cands.length) return null;
+  // Shuffle first so ties break at random. Without this the stable sorts below
+  // always picked the lowest seat among equals, so bots piled onto the host.
+  for (let i = cands.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [cands[i], cands[j]] = [cands[j], cands[i]]; }
   if (act.type === 'exterm') {
     // if a rival is ahead and reachable, remove their heaviest rat; else self-cool
     const rivals = cands.filter(x => x.id !== p.id);

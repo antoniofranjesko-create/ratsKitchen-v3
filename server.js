@@ -341,7 +341,7 @@ io.on('connection', (socket) => {
   });
 });
 
-const VERSION = '4.0.1';
+const VERSION = '4.0.2';
 app.get('/version', (req, res) => res.json({ version: VERSION }));
 
 const PORT = process.env.PORT || 3000;
