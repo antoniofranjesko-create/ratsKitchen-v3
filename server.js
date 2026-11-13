@@ -48,11 +48,9 @@ function project(g, viewerId, room) {
       return active && active.bot;
     })(),
     stepMode: !!(room && room.stepMode),
-    binsRats: g.bins.filter(b => b.rat).length,
+    binsRats: g.bins.filter(b => b.rat).length + (g.alley||[]).length,
     // THE ALLEY — 3 face-up rats
-    alley: (g.alley||[]).map(c => ({ id:c.rat.id, kind:c.rat.kind, name:c.rat.name,
-      w:c.rat.w, heat:c.rat.heat, col:c.rat.col, prop:c.rat.prop,
-      desc:(E.RATS[c.rat.kind]&&E.RATS[c.rat.kind].desc)||'' })),
+    alley: [],   // v4.1: no visible alley — the top bins rat stays hidden
     deckLeft: g.deck.length,
     // Market Day: the event flipped for the current round (null before any flip).
     market: g.market ? { event: g.market.event, name: g.market.name, desc: g.market.desc } : null,
@@ -341,7 +339,7 @@ io.on('connection', (socket) => {
   });
 });
 
-const VERSION = '4.0.2';
+const VERSION = '4.1.0';
 app.get('/version', (req, res) => res.json({ version: VERSION }));
 
 const PORT = process.env.PORT || 3000;

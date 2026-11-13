@@ -6,7 +6,7 @@
 'use strict';
 
 const COLOURS = ['red', 'blue', 'green'];
-const THRESHOLD = 7;   // Rat King win at weight 7 (raised from 6: the Alley and feeding made accumulation faster)
+const THRESHOLD = 6;   // Rat King win at weight 6 (v4.1 streamlined set has fewer ways to gain rats)
 const STARS = 4;
 const HAND = 7;
 
@@ -26,7 +26,7 @@ const RATS = {
   boiler: { name: 'Boiler Rat', w: 1, heat: 1, prop: 'no_steal',    col: true,  desc: 'Cannot be Poached.' },
   larder: { name: 'Larder Rat', w: 1, heat: 1, prop: 'feed_eat',    col: true,  desc: 'FEED 1 Food: eat this rat and regain 1 star. Once per turn.' },
   grub:   { name: 'Grub Rat',   w: 1, heat: 2, prop: null,          col: true,  desc: 'Cheap stock but runs hot — weight 1, heat 2. A liability when the inspector calls.' },
-  breeder:{ name: 'Breeder Rat',w: 1, heat: 1, prop: 'breed',       col: true,  desc: 'FREE, once per turn: take any rat from the alley. The engine you build around.' },
+  breeder:{ name: 'Breeder Rat',w: 1, heat: 1, prop: 'breed',       col: true,  desc: 'FREE, once per turn: take the top rat of the bins.' },
   ratato: { name: 'Ratato Rat', w: 0, heat: 1, prop: null,        col: true,  desc: 'Weight 0, heat 1. Drawn straight into YOUR kitchen — worthless stock that still draws the inspector eye.' },
   hotrat: { name: 'Hot Ratato', w: 0, heat: 1, prop: 'sabotage',  col: true,  desc: 'Weight 0, heat 1. Held in hand, then thrown into a RIVAL kitchen — all heat, no value. Never your own.' },
 };
@@ -49,7 +49,7 @@ const CARDS = {
   food:        { name: 'Food',            cls: 'buff', desc: 'Spend 2 Food to regain 1 star. Powers builds that need feeding.' },
   cat:         { name: 'Cat',             cls: 'buff', desc: 'Play on one of your rats (not Fat or Alpha) to shield it — blocks the next single attack on that rat.' },
   lastresort:  { name: 'Last Resort',     cls: 'buff', desc: 'Eat any one of your rats and regain stars equal to its weight.' },
-  delivery:    { name: 'Special Delivery',cls: 'engine', desc: 'Take any rat from the alley into your kitchen. Your choice of the three.' },
+  delivery:    { name: 'Special Delivery',cls: 'engine', desc: 'Take the top rat of the bins into your kitchen.' },
   pelican:     { name: 'Pelican Delivery',cls: 'engine', desc: 'Place in YOUR kitchen. At the start of your next turn the pelican drops a rat from the alley into it — a delayed Special Delivery.' },
   recycle:     { name: 'Recycle Day',     cls: 'engine', desc: 'Take any one of the last 3 discarded action cards back into your hand.' },
   rattrap:     { name: 'Rat Trap',        cls: 'engine', desc: 'Place on a rival kitchen. The next rat to enter it is caught — and YOU take it into your kitchen. Springs once; expires at your next turn if nothing walks in.' },
@@ -58,7 +58,7 @@ const CARDS = {
   wd_snap:     { name: 'Snap Inspection',  cls: 'drawn', desc: 'WHEN DRAWN, reveal at once — it fires on YOU. Has one fixed colour: you lose 1 star per rat you hold of that colour. Hold none of it and the inspector walks past. Cannot be held or played.' },
   wd_snap2:    { name: 'Snap Inspection',  sub: 'Two Colour', cls: 'drawn', desc: 'WHEN DRAWN, reveal at once — it fires on YOU. Has two fixed colours: you lose 1 star per rat you hold of EITHER. Harder to dodge than the one-colour version. Cannot be held or played.' },
   wd_mole:     { name: 'Snap Inspection',  sub: 'Naked Mole Rat', cls: 'drawn', desc: 'WHEN DRAWN, reveal at once — it fires on YOU. The mole is blind to colour: a flat -1 star, no matter what you hold. Cannot be held or played.' },
-  desperate:   { name: 'Dodgy Inspector', cls: 'engine', desc: 'He docks your rating — lose 1 star — but he is on the take, and looks the other way while you help yourself to any rat from the alley.' },
+  desperate:   { name: 'Dodgy Inspector', cls: 'engine', desc: 'He docks your rating — lose 1 star — but he is on the take, and looks the other way while you take the top rat of the bins.' },
   gambit:      { name: 'Gambit',          cls: 'engine', desc: 'Look at the top 3 cards of the deck. Keep 1; put the other 2 back on top (you know what they are).' },
 };
 
@@ -93,10 +93,10 @@ function deckConfig(P) {
   const actions = {
     mole, sched1, sched2,
     wd_snap, wd_snap2, wd_mole,
-    poach: 5, switch: 6, chilli: 4, hotratato: 4, grease: 3, klepto: 3, shakedown: 3,
+    poach: 5, switch: 0, chilli: 4, hotratato: 4, grease: 3, klepto: 3, shakedown: 0,   // v4.1: Switcheroo, Shakedown cut
     territorial: 3, wok: 3, boardup: 4,
     food: 12, cat: 3, lastresort: 4,
-    delivery: 4, pelican: 3, recycle: 3, rattrap: 3, exterm: 4, inherit: 3, desperate: 3,
+    delivery: 6, pelican: 0, recycle: 0, rattrap: 0, exterm: 4, inherit: 0, desperate: 3,   // v4.1: Pelican, Recycle, Rat Trap, Inheritance cut
     gambit: 6,                                             // normal Engine card (was WD x3)
   };
   // ── RATS ─────────────────────────────────────────────────────────────────
@@ -105,10 +105,10 @@ function deckConfig(P) {
   // Sewer (2) is colourless and sits outside the colour split.
   // Ratato/Hot Ratato are counted separately (4 + 4).
   const ratMaster = {
-    plain: 4, fat: 6,
-    runner: 3, sow: 3, toll: 3, feral: 3, spice: 3,
-    boiler: 3, larder: 3, grub: 3, breeder: 2,
-    alpha: 1, sewer: 2,
+    plain: 16, fat: 10,
+    runner: 3, sow: 3, toll: 0, feral: 0, spice: 0,
+    boiler: 0, larder: 3, grub: 0, breeder: 2,
+    alpha: 0, sewer: 2,   // v4.1: Toll, Feral, Spice, Boiler, Grub, Alpha cut
   };
   const ratatoRats = 4;   // drawn straight into your own kitchen
   const hotratRats = 4;   // held in hand, thrown into a rival's
@@ -130,7 +130,7 @@ function deckConfig(P) {
 // Curfew CUT to hit 6 — it's a pure social-layer no-op vs bots anyway.
 // Cheese Glut and Rat Boom remain parked from the prior pass.
 const MARKET_EVENTS = [
-  { event: 'rat_release',  name: 'Rat Release',       desc: 'The player holding the fewest rats takes 1 rat from the alley. Tied? Fewest cards. Still tied? They each draw from the deck.' },
+  { event: 'rat_release',  name: 'Rat Release',       desc: 'The player holding the fewest rats takes the top rat of the bins. Tied? Fewest cards. Still tied? They each draw from the deck.' },
   { event: 'frenzy',       name: 'Frenzy',            desc: 'Every player draws 1 card.' },
   { event: 'blackout',     name: 'Blackout',          desc: 'Every player discards 1 card.' },
   { event: 'pied_piper',   name: 'Pied Piper',        desc: 'Every player passes one of their own rats one seat to the left, simultaneously.' },
@@ -388,7 +388,7 @@ function ratEnters(g, p, rat) {
 function ratToBinsBottom(g, rat) { g.bins.unshift({ id: rat.id, rat }); }
 
 // Keep the Alley topped up to 3 face-up rats from the bins.
-const ALLEY_SIZE = 3;
+const ALLEY_SIZE = 1;   // v4.1: no visible alley. g.alley now just holds the top rat of the bins (hidden).
 function refillAlley(g) {
   while (g.alley.length < ALLEY_SIZE) {
     let idx = -1;

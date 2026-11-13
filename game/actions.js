@@ -153,7 +153,7 @@ function flipMarketDay(g) {
       if (pool.length === 1 && g.alley.length) {
         const cand = pool[0];
         const b = E.takeFromAlley(g, null);
-        if (E.ratEnters(g, cand, b.rat)) { E.logAdd(g, `Rat Release: ${cand.name} (fewest rats) takes a ${b.rat.name} from the alley.`); E.checkWin(g, cand); }
+        if (E.ratEnters(g, cand, b.rat)) { E.logAdd(g, `Rat Release: ${cand.name} (fewest rats) takes a ${b.rat.name} from the bins.`); E.checkWin(g, cand); }
       } else {
         // still tied (or no bin rat): each tied player draws from the deck
         E.logAdd(g, `Rat Release: tied on rats and cards — ${pool.map(q=>q.name).join(', ')} each draw from the deck.`);
@@ -299,12 +299,12 @@ function legalActions(g, p) {
     // ---- rat trap ----
     if (t === 'rattrap' && true)
       push({ id: c.id, type: t, needsTarget: true, targets: [...opps.map(o => o.id), p.id], label: 'Rat Trap' });
-    // ---- special delivery: take any alley rat → you ----
+    // ---- special delivery: top bins rat → you ----
     if (t === 'delivery' && g.alley.length && canGainRat(p) && !p._playedRat)
-      push({ id: c.id, type: t, needsAlleyRat: true, label: 'Special Delivery (take an alley rat)' });
+      push({ id: c.id, type: t, label: 'Special Delivery (top bins rat → you)' });
     // ---- dodgy inspector: lose a star, take any alley rat ----
     if (t === 'desperate' && p.stars >= 2 && g.alley.length && canGainRat(p) && !p._playedRat)
-      push({ id: c.id, type: t, needsAlleyRat: true, label: 'Dodgy Inspector (-1 star → alley rat)' });
+      push({ id: c.id, type: t, label: 'Dodgy Inspector (-1 star → top bins rat)' });
     // ---- pelican delivery: delayed Special Delivery on YOUR OWN kitchen ----
     if (t === 'pelican' && g.alley.length && !p._pelicanBy)
       push({ id: c.id, type: t, label: 'Pelican Delivery (alley rat arrives next turn)' });
@@ -354,10 +354,11 @@ function legalActions(g, p) {
     const hasLR = p.hand.find(c => c.card === 'lastresort');
     if (hasLR && p.rats.length) push({ id: hasLR.id, type: 'eat_lastresort', needsRat: true, label: 'Last Resort — eat a rat (+stars = weight)' });
   }
-  // Breeder Rat: FREE once per turn — take any rat from the Alley
+  // Breeder Rat: FREE once per turn — take the top rat of the bins.
+  // (Tested at 1 Food in v4.1: Rat King wins fell to 22-36%, so it stays free.)
   if (!p._bredThisTurn && p.rats.some(r => r.prop === 'breed')
       && g.alley.length && canGainRat(p) && !p._playedRat)
-    push({ type: 'breed', needsAlleyRat: true, label: 'Breeder: take an alley rat (free)' });
+    push({ type: 'breed', label: 'Breeder: top bins rat (free)' });
 
   // ── FEEDING ───────────────────────────────────────────────────────────────
   // Runner, Sow, Larder and Spice have a FED ability costing 1 Food, once per
@@ -515,15 +516,15 @@ function apply(g, p, act, targetId, ratId) {
     case 'delivery': {
       bin(takeCard(act.id));
       // take ANY rat from the Alley (3 face-up) — a real choice
-      const b = E.takeFromAlley(g, ratId);
-      if (b) { if (E.ratEnters(g, p, b.rat)) { p._ratsIn++; p._playedRat = true; } E.logAdd(g, `${p.name} takes a ${b.rat.name} from the alley.`); }
+      const b = E.takeFromAlley(g, null);
+      if (b) { if (E.ratEnters(g, p, b.rat)) { p._ratsIn++; p._playedRat = true; } E.logAdd(g, `${p.name} takes the top bins rat — a ${b.rat.name}.`); }
       p._actedBuild = true; break;
     }
     case 'desperate': {
       bin(takeCard(act.id));
       E.damage(g, p, 1);
       if (!p.alive) break;
-      const lb = E.takeFromAlley(g, ratId);
+      const lb = E.takeFromAlley(g, null);
       if (lb && E.ratEnters(g, p, lb.rat)) {
         p._ratsIn++; p._playedRat = true;
         E.logAdd(g, `The Dodgy Inspector docks ${p.name} a star — and looks away while they take a ${lb.rat.name}.`);
@@ -596,10 +597,10 @@ function apply(g, p, act, targetId, ratId) {
     }
     case 'inherit': { bin(takeCard(act.id)); t._inheritBy = p.id; p._actedBuild = true; E.logAdd(g, `${p.name} places Inheritance on ${t.name}.`); break; }
     case 'breed': {
-      const b = E.takeFromAlley(g, ratId);
+      const b = E.takeFromAlley(g, null);
       if (b && E.ratEnters(g, p, b.rat)) {
         p._ratsIn++; p._playedRat = true;
-        E.logAdd(g, `${p.name}'s Breeder takes a ${b.rat.name} from the alley.`);
+        E.logAdd(g, `${p.name}'s Breeder brings a ${b.rat.name} from the bins.`);
       }
       p._bredThisTurn = true; p._actedBuild = true; break;
     }

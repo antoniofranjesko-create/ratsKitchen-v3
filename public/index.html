@@ -335,7 +335,7 @@ button:disabled{opacity:.35;cursor:not-allowed}
 <body>
 <div class="topbar">
   <div class="brand">RAT'S <b>KITCHEN</b></div>
-  <div class="meta"><span class="build">BUILD v4.0.2</span></div>
+  <div class="meta"><span class="build">BUILD v4.1.0</span></div>
 </div>
 
 <div id="lobby" class="wrap">
@@ -390,7 +390,6 @@ button:disabled{opacity:.35;cursor:not-allowed}
             <div class="pile turnpile"><span class="pilen" id="turnN">0</span><span class="pilek">turn</span></div>
           </div>
         </div>
-        <div class="panel"><div class="panel-h">The alley</div><div class="alleyrow" id="alleyRow"></div></div>
         <div class="panel"><div class="panel-h">Kitchen log</div><div class="log" id="log"></div></div>
       </div>
     </div>
@@ -694,7 +693,7 @@ function ratHTML(r){
   const marks=[];
   if(r.shielded) marks.push('<span class="ratmark cat" title="Shielded by a Cat">🐱</span>');
   if(r.chilli) marks.push('<span class="ratmark hot" title="Hot Chilli — explodes next turn">🌶️</span>');
-  if(r.prop==='breed') marks.push('<span class="ratmark act" title="Breeder — free once a turn: take any alley rat">⚙️</span>');
+  if(r.prop==='breed') marks.push('<span class="ratmark act" title="Breeder — free once a turn: top bins rat">⚙️</span>');
   if(r.prop==='feed_draw')  marks.push('<span class="ratmark act" title="Runner — feed 1 Food: draw 1, once a turn">🍖</span>');
   if(r.prop==='feed_draw2') marks.push('<span class="ratmark act" title="Sow — feed 1 Food: draw 2, once a turn">🍖</span>');
   if(r.prop==='feed_eat')   marks.push('<span class="ratmark act" title="Larder — feed 1 Food: eat it for 1 star, once a turn">🍖</span>');
@@ -775,8 +774,8 @@ function playVerb(a,card){
   const map={mole:'Inspect (snap, -1 star)',sched1:'Arm inspection',sched2:'Arm 2-colour inspection',
     poach:'Poach a rat',ratato:'Dump a rat',hotratato:'Ratata Quente — dump a rat',switch:'Swap a rat',chilli:'Explode a rat',
     territorial:'Mark territorial',grease:'Grease their inspector',boardup:'Board up',cat:'Shield a rat',wok:'Ready a Wok block',
-    rattrap:'Set a rat trap',pelican:'Send the pelican',delivery:'Take an alley rat',recycle:'Recycle a discard',
-    exterm:'Exterminate a rat',inherit:'Place Inheritance',desperate:'Dodgy Inspector (-1 star)',feed:'Feed the rat (1 Food)',breed:'Breeder: take alley rat',gambit:'Look at top 3',klepto:'Lift a card',shakedown:'Shake down for a card',
+    rattrap:'Set a rat trap',pelican:'Send the pelican',delivery:'Take top bins rat',recycle:'Recycle a discard',
+    exterm:'Exterminate a rat',inherit:'Place Inheritance',desperate:'Dodgy Inspector (-1 star)',feed:'Feed the rat (1 Food)',breed:'Breeder: top bins rat',gambit:'Look at top 3',klepto:'Lift a card',shakedown:'Shake down for a card',
     lastresort:'Eat a rat for stars',food_heal:'Spend 2 Food (+star)',breed:'Breeder: 2 Food → rat',misc:'Do the odd job'};
   return map[a.type]||a.label;
 }
