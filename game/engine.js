@@ -6,7 +6,7 @@
 'use strict';
 
 const COLOURS = ['red', 'blue', 'green'];
-const THRESHOLD = 6;   // Rat King win at weight 6 (restored from 5)   // weight to win
+const THRESHOLD = 7;   // Rat King win at weight 7 (raised from 6: the Alley and feeding made accumulation faster)
 const STARS = 4;
 const HAND = 7;
 
@@ -15,18 +15,18 @@ const HAND = 7;
 // weight, heat, prop, colourable
 const RATS = {
   plain:  { name: 'Street Rat', w: 1, heat: 1, prop: null,          col: true,  desc: 'Plain stock. A small inspection risk.' },
-  runner: { name: 'Runner Rat', w: 1, heat: 1, prop: 'draw_again',  col: true,  desc: 'Draw a card the moment it enters your kitchen.' },
+  runner: { name: 'Runner Rat', w: 1, heat: 1, prop: 'feed_draw',   col: true,  desc: 'FEED 1 Food: draw a card. Once per turn.' },
   fat:    { name: 'Fat Rat',    w: 2, heat: 2, prop: 'no_cat',      col: true,  desc: 'Heavy stock — weight 2. Cannot be shielded by a Cat.' },
-  sow:    { name: 'Sow Rat',    w: 2, heat: 2, prop: 'draw_or_play',col: true,  desc: 'While held, once per turn you may draw a card instead of playing.' },
+  sow:    { name: 'Sow Rat',    w: 2, heat: 2, prop: 'feed_draw2',  col: true,  desc: 'FEED 1 Food: draw 2 cards. Once per turn.' },
   alpha:  { name: 'Alpha Rat',  w: 2, heat: 2, prop: 'alpha_guard', col: true,  desc: 'While Alpha is in your kitchen, none of your rats can be Poached. Cannot be Cat-shielded.' },
   sewer:  { name: 'Sewer Rat',  w: 1, heat: 0, prop: null,          col: false, desc: 'Colourless and heat 0 — invisible to inspection.' },
   toll:   { name: 'Toll Rat',   w: 1, heat: 1, prop: 'tax',         col: true,  desc: 'If inspected while you hold it, the inspector gives you a card.' },
   feral:  { name: 'Feral Rat',  w: 1, heat: 1, prop: 'no_dump',     col: true,  desc: 'Cannot be moved by sabotage or dump effects.' },
-  spice:  { name: 'Spice Rat',  w: 1, heat: 1, prop: 'no_explode',  col: true,  desc: 'Cannot be Hot Chilli-d.' },
+  spice:  { name: 'Spice Rat',  w: 1, heat: 1, prop: 'no_explode',  col: true,  desc: 'Cannot be Hot Chilli-d. FEED 1 Food: clear a Hot Chilli from any of your rats. Once per turn.' },
   boiler: { name: 'Boiler Rat', w: 1, heat: 1, prop: 'no_steal',    col: true,  desc: 'Cannot be Poached.' },
-  larder: { name: 'Larder Rat', w: 1, heat: 1, prop: 'free_eat',    col: true,  desc: 'May eat itself for free — stars equal to its weight.' },
+  larder: { name: 'Larder Rat', w: 1, heat: 1, prop: 'feed_eat',    col: true,  desc: 'FEED 1 Food: eat this rat and regain 1 star. Once per turn.' },
   grub:   { name: 'Grub Rat',   w: 1, heat: 2, prop: null,          col: true,  desc: 'Cheap stock but runs hot — weight 1, heat 2. A liability when the inspector calls.' },
-  breeder:{ name: 'Breeder Rat',w: 1, heat: 1, prop: 'breed',        col: true,  desc: 'While in your kitchen, once per turn you may spend 2 Food to take the TOP rat of the bins into your kitchen. A slow engine — the Food it eats is Food you can\'t heal with.' },
+  breeder:{ name: 'Breeder Rat',w: 1, heat: 1, prop: 'breed',       col: true,  desc: 'FREE, once per turn: take any rat from the alley. The engine you build around.' },
   ratato: { name: 'Ratato Rat', w: 0, heat: 1, prop: null,        col: true,  desc: 'Weight 0, heat 1. Drawn straight into YOUR kitchen — worthless stock that still draws the inspector eye.' },
   hotrat: { name: 'Hot Ratato', w: 0, heat: 1, prop: 'sabotage',  col: true,  desc: 'Weight 0, heat 1. Held in hand, then thrown into a RIVAL kitchen — all heat, no value. Never your own.' },
 };
@@ -58,6 +58,7 @@ const CARDS = {
   wd_snap:     { name: 'Snap Inspection',  cls: 'drawn', desc: 'WHEN DRAWN, reveal at once — it fires on YOU. Has one fixed colour: you lose 1 star per rat you hold of that colour. Hold none of it and the inspector walks past. Cannot be held or played.' },
   wd_snap2:    { name: 'Snap Inspection',  sub: 'Two Colour', cls: 'drawn', desc: 'WHEN DRAWN, reveal at once — it fires on YOU. Has two fixed colours: you lose 1 star per rat you hold of EITHER. Harder to dodge than the one-colour version. Cannot be held or played.' },
   wd_mole:     { name: 'Snap Inspection',  sub: 'Naked Mole Rat', cls: 'drawn', desc: 'WHEN DRAWN, reveal at once — it fires on YOU. The mole is blind to colour: a flat -1 star, no matter what you hold. Cannot be held or played.' },
+  desperate:   { name: 'Dodgy Inspector', cls: 'engine', desc: 'He docks your rating — lose 1 star — but he is on the take, and looks the other way while you help yourself to any rat from the alley.' },
   gambit:      { name: 'Gambit',          cls: 'engine', desc: 'Look at the top 3 cards of the deck. Keep 1; put the other 2 back on top (you know what they are).' },
 };
 
@@ -95,18 +96,18 @@ function deckConfig(P) {
     poach: 5, switch: 6, chilli: 4, hotratato: 4, grease: 3, klepto: 3, shakedown: 3,
     territorial: 3, wok: 3, boardup: 4,
     food: 12, cat: 3, lastresort: 4,
-    delivery: 4, pelican: 3, recycle: 3, rattrap: 3, exterm: 4, inherit: 3,
+    delivery: 4, pelican: 3, recycle: 3, rattrap: 3, exterm: 4, inherit: 3, desperate: 3,
     gambit: 6,                                             // normal Engine card (was WD x3)
   };
   // ── RATS ─────────────────────────────────────────────────────────────────
   // ONE canonical set of physical rat cards (fixed counts — no percentages).
-  // 34 colourable + 8 Ratato/Hot Ratato = 42 = exactly 14 per colour.
+  // 37 colourable + 8 Ratato/Hot Ratato = 45 = exactly 15 per colour.
   // Sewer (2) is colourless and sits outside the colour split.
   // Ratato/Hot Ratato are counted separately (4 + 4).
   const ratMaster = {
-    plain: 9, fat: 6,
-    runner: 2, sow: 2, toll: 2, feral: 2, spice: 2,
-    boiler: 2, larder: 2, grub: 2, breeder: 2,
+    plain: 4, fat: 6,
+    runner: 3, sow: 3, toll: 3, feral: 3, spice: 3,
+    boiler: 3, larder: 3, grub: 3, breeder: 2,
     alpha: 1, sewer: 2,
   };
   const ratatoRats = 4;   // drawn straight into your own kitchen
@@ -129,7 +130,7 @@ function deckConfig(P) {
 // Curfew CUT to hit 6 — it's a pure social-layer no-op vs bots anyway.
 // Cheese Glut and Rat Boom remain parked from the prior pass.
 const MARKET_EVENTS = [
-  { event: 'rat_release',  name: 'Rat Release',       desc: 'The player holding the fewest rats draws 1 rat from the bins.' },
+  { event: 'rat_release',  name: 'Rat Release',       desc: 'The player holding the fewest rats takes 1 rat from the alley. Tied? Fewest cards. Still tied? They each draw from the deck.' },
   { event: 'frenzy',       name: 'Frenzy',            desc: 'Every player draws 1 card.' },
   { event: 'blackout',     name: 'Blackout',          desc: 'Every player discards 1 card.' },
   { event: 'pied_piper',   name: 'Pied Piper',        desc: 'Every player passes one of their own rats one seat to the left, simultaneously.' },
@@ -282,6 +283,9 @@ function newGame(playerDefs) {
 
   const g = {
     players, deck, bins, discard: [], P,
+    // THE ALLEY: 3 rats face-up beside the bins. Every card that reaches the
+    // bins takes one of these three (a real choice). Refilled immediately.
+    alley: [],
     reshuffleRats: cfg.reshuffleRats,
     turn: 0, active: 0, over: false, winner: null,
     log: [], pending: null,   // pending reaction window
@@ -318,6 +322,7 @@ function newGame(playerDefs) {
   // shuffle the set-aside WD cards back into the deck
   for (const c of setAside) g.deck.push(c);
   shuffle(g.deck);
+  refillAlley(g);
   logAdd(g, `Game start — ${P} players, first to weight ${THRESHOLD} wins.`);
   return g;
 }
@@ -381,6 +386,25 @@ function ratEnters(g, p, rat) {
 }
 // rats removed from play go to the BOTTOM of the rat-bin (recirculate)
 function ratToBinsBottom(g, rat) { g.bins.unshift({ id: rat.id, rat }); }
+
+// Keep the Alley topped up to 3 face-up rats from the bins.
+const ALLEY_SIZE = 3;
+function refillAlley(g) {
+  while (g.alley.length < ALLEY_SIZE) {
+    let idx = -1;
+    for (let i = g.bins.length - 1; i >= 0; i--) { if (g.bins[i].rat) { idx = i; break; } }
+    if (idx < 0) break;                       // bins exhausted
+    g.alley.push(g.bins.splice(idx, 1)[0]);
+  }
+}
+// Take a specific rat out of the Alley by id (or the first if unspecified).
+function takeFromAlley(g, ratId) {
+  let i = ratId ? g.alley.findIndex(c => c.rat && c.rat.id === ratId) : 0;
+  if (i < 0) i = 0;
+  const c = g.alley.splice(i, 1)[0];
+  refillAlley(g);
+  return c || null;
+}
 function ratToBins(g, p, rat) {
   p.rats = p.rats.filter(r => r.id !== rat.id);
   g.bins.push({ id: rat.id, rat });
@@ -469,6 +493,7 @@ function checkWin(g, p) {
 module.exports = {
   COLOURS, THRESHOLD, STARS, HAND, RATS, CARDS,
   newGame, drawCard, weight, winWeight, heat, heatOf, hasCol, opponents,
+  refillAlley, takeFromAlley, ALLEY_SIZE,
   ratEnters, ratToBins, fireMole, fireScheduled, tryCat, damage,
   eliminate, checkWin, logAdd, shuffle, rid, makeRat, deckConfig,
   buildMarketDeck, MARKET_EVENTS,

@@ -176,6 +176,9 @@ button:disabled{opacity:.35;cursor:not-allowed}
 .inspcol{display:inline-block;width:9px;height:9px;border-radius:2px;border:1px solid #000;margin-left:2px;vertical-align:middle}
 .inspcol.red{background:var(--red)} .inspcol.blue{background:var(--blue)}
 .inspcol.green{background:var(--green)} .inspcol.yellow{background:var(--yellow)}
+.alleyrow{display:flex;gap:8px;padding:12px;justify-content:center;flex-wrap:wrap}
+.alleyrow .rat{width:52px;height:70px}
+.alleyrow .empty{color:var(--ash);font-size:11px;letter-spacing:1px;text-transform:uppercase;padding:20px 0}
 .piles{display:flex;gap:14px;padding:14px 12px;align-items:flex-end;justify-content:center}
 .pile{display:flex;flex-direction:column;align-items:center;gap:3px}
 /* stacked-card look: two offset shadows behind the face */
@@ -327,7 +330,7 @@ button:disabled{opacity:.35;cursor:not-allowed}
 <body>
 <div class="topbar">
   <div class="brand">RAT'S <b>KITCHEN</b></div>
-  <div class="meta"><span class="build">BUILD v3.9.5</span></div>
+  <div class="meta"><span class="build">BUILD v4.0.0</span></div>
 </div>
 
 <div id="lobby" class="wrap">
@@ -379,6 +382,7 @@ button:disabled{opacity:.35;cursor:not-allowed}
             <div class="pile turnpile"><span class="pilen" id="turnN">0</span><span class="pilek">turn</span></div>
           </div>
         </div>
+        <div class="panel"><div class="panel-h">The alley</div><div class="alleyrow" id="alleyRow"></div></div>
         <div class="panel"><div class="panel-h">Kitchen log</div><div class="log" id="log"></div></div>
       </div>
     </div>
@@ -405,8 +409,8 @@ const socket = io();
 let YOU=null, STATE=null, picking=null, selectedCardId=null, pendingGambit=null;
 const $=id=>document.getElementById(id);
 const RAT_ART={plain:'🐀',runner:'🐀',fat:'🐀',sow:'🐀',alpha:'👑',sewer:'🐀',toll:'🐀',feral:'🐀',spice:'🐀',boiler:'🐀',larder:'🐀',grub:'🐛',breeder:'🍼',ratato:'🥔',hotrat:'🌡️'};
-const CARD_ART={mole:'🦫',sched1:'🦅',sched2:'🦅',wd_snap:'🦅',wd_snap2:'🦅',wd_mole:'🦫',poach:'🎣',ratato:'🥔',hotrat:'🌡️',switch:'🔄',hotratato:'🥔',chilli:'🌶️',territorial:'🚧',grease:'💰',food:'🍜',cat:'🐱',wok:'🍳',boardup:'🔨',rattrap:'🪤',delivery:'🚚',pelican:'🦩',recycle:'♻️',exterm:'🧯',inherit:'📜',gambit:'🎴',klepto:'🧤',shakedown:'💢',lastresort:'🍽️',misc:'🎲'};
-const CARD_CLS={mole:'attack',sched1:'attack',sched2:'attack',wd_snap:'drawn',wd_snap2:'drawn',wd_mole:'drawn',poach:'attack',ratato:'attack',ratato_rat:'attack',switch:'attack',hotratato:'attack',hotrat:'attack',chilli:'attack',territorial:'control',grease:'attack',klepto:'attack',shakedown:'attack',food:'buff',cat:'defence',wok:'defence',boardup:'defence',lastresort:'buff',rattrap:'engine',delivery:'engine',pelican:'engine',recycle:'engine',exterm:'engine',inherit:'engine',gambit:'engine',misc:'drawn'};
+const CARD_ART={mole:'🦫',sched1:'🦅',sched2:'🦅',wd_snap:'🦅',wd_snap2:'🦅',wd_mole:'🦫',poach:'🎣',ratato:'🥔',hotrat:'🌡️',switch:'🔄',hotratato:'🥔',chilli:'🌶️',territorial:'🚧',grease:'💰',food:'🍜',cat:'🐱',wok:'🍳',boardup:'🔨',rattrap:'🪤',delivery:'🚚',pelican:'🦩',recycle:'♻️',exterm:'🧯',inherit:'📜',desperate:'🕵',gambit:'🎴',klepto:'🧤',shakedown:'💢',lastresort:'🍽️',misc:'🎲'};
+const CARD_CLS={mole:'attack',sched1:'attack',sched2:'attack',wd_snap:'drawn',wd_snap2:'drawn',wd_mole:'drawn',poach:'attack',ratato:'attack',ratato_rat:'attack',switch:'attack',hotratato:'attack',hotrat:'attack',chilli:'attack',territorial:'control',grease:'attack',klepto:'attack',shakedown:'attack',food:'buff',cat:'defence',wok:'defence',boardup:'defence',lastresort:'buff',rattrap:'engine',delivery:'engine',pelican:'engine',recycle:'engine',exterm:'engine',inherit:'engine',desperate:'engine',gambit:'engine',misc:'drawn'};
 const CARD_TYPE={attack:'Attack',defence:'Defence',engine:'Engine',control:'Control',nerf:'Nerf',buff:'Buff',drawn:'When drawn'};
 
 $('btnCreate').onclick=()=>socket.emit('create',{name:$('name').value.trim()});
@@ -450,6 +454,12 @@ function render(){
   $('deckN').textContent=STATE.deckLeft;
   $('turnN').textContent=STATE.turn;
   renderMarket();
+  const ar=$('alleyRow');
+  if(ar){
+    const al=STATE.alley||[];
+    ar.innerHTML = al.length ? al.map(r=>ratHTML(r)).join('')
+                             : '<span class="empty">the alley is empty</span>';
+  }
   renderNowPlaying();
   const meActive = STATE.active===YOU && !STATE.over;
   $('stalls').innerHTML=STATE.players.map(p=>stallHTML(p)).join('');
@@ -662,9 +672,10 @@ function ratHTML(r){
   const marks=[];
   if(r.shielded) marks.push('<span class="ratmark cat" title="Shielded by a Cat">🐱</span>');
   if(r.chilli) marks.push('<span class="ratmark hot" title="Hot Chilli — explodes next turn">🌶️</span>');
-  if(r.prop==='breed') marks.push('<span class="ratmark act" title="Breeder — spend 2 Food on your turn for a bins rat">⚙️</span>');
-  if(r.prop==='draw_or_play') marks.push('<span class="ratmark act" title="Sow — draw instead of playing, once a turn">⚙️</span>');
-  if(r.prop==='free_eat') marks.push('<span class="ratmark act" title="Larder — may eat itself for a star">⚙️</span>');
+  if(r.prop==='breed') marks.push('<span class="ratmark act" title="Breeder — free once a turn: take any alley rat">⚙️</span>');
+  if(r.prop==='feed_draw')  marks.push('<span class="ratmark act" title="Runner — feed 1 Food: draw 1, once a turn">🍖</span>');
+  if(r.prop==='feed_draw2') marks.push('<span class="ratmark act" title="Sow — feed 1 Food: draw 2, once a turn">🍖</span>');
+  if(r.prop==='feed_eat')   marks.push('<span class="ratmark act" title="Larder — feed 1 Food: eat it for 1 star, once a turn">🍖</span>');
   return `<div class="${cls.join(' ')} ratclick" data-rat='${esc(JSON.stringify({kind:r.kind,name:r.name,w:r.w,heat:r.heat,col:r.col,desc:r.desc||"",prop:r.prop||null}))}' title="${esc(r.name)} · tap for role">
     <div class="band"></div>
     ${marks.length?`<div class="ratmarks">${marks.join('')}</div>`:''}
@@ -743,7 +754,7 @@ function playVerb(a,card){
     poach:'Poach a rat',ratato:'Dump a rat',hotratato:'Ratata Quente — dump a rat',switch:'Swap a rat',chilli:'Explode a rat',
     territorial:'Mark territorial',grease:'Grease their inspector',boardup:'Board up',cat:'Shield a rat',wok:'Ready a Wok block',
     rattrap:'Set a rat trap',pelican:'Send the pelican',delivery:'Take top bins rat',recycle:'Recycle a discard',
-    exterm:'Exterminate a rat',inherit:'Place Inheritance',gambit:'Look at top 3',klepto:'Lift a card',shakedown:'Shake down for a card',
+    exterm:'Exterminate a rat',inherit:'Place Inheritance',desperate:'Dodgy Inspector (-1 star)',feed:'Feed the rat (1 Food)',breed:'Breeder: take alley rat',gambit:'Look at top 3',klepto:'Lift a card',shakedown:'Shake down for a card',
     lastresort:'Eat a rat for stars',food_heal:'Spend 2 Food (+star)',breed:'Breeder: 2 Food → rat',misc:'Do the odd job'};
   return map[a.type]||a.label;
 }
@@ -811,6 +822,8 @@ function choose(a){
   if(a.type==='hotratato'){ picking={act:a,targets:a.targets,msg:'Ratata Quente — click a kitchen',then:'myRat'}; selectedCardId=null; render(); return; }
   // Cat / Last Resort: no target, just pick one of YOUR rats
   if(a.type==='cat'||a.type==='eat_lastresort'){ selectedCardId=null; ownRatOnly(a); return; }
+  // pick which of the 3 alley rats to take
+  if(a.needsAlleyRat){ selectedCardId=null; alleyPick(a); return; }
   if(a.type==='fire'&&a.pickOneCol){
     picking={act:a,targets:a.targets,msg:'Fire Inspection — click a kitchen',then:'fireCol'};
     selectedCardId=null; render(); return;
@@ -880,6 +893,14 @@ async function pickFireColour(a, targetId){
   });
   const pick=await modalPick('Inspect which colour in '+esc(k.name)+"'s kitchen?", opts);
   if(pick) socket.emit('act',{type:a.type,id:a.id,target:targetId,cols:[pick]});
+  else render();
+}
+// choose one of the 3 face-up alley rats
+async function alleyPick(a){
+  const al=STATE.alley||[];
+  if(!al.length){ render(); return; }
+  const pick=await modalPick('Take which rat from the alley?', ratOpts(al));
+  if(pick) socket.emit('act',{type:a.type,id:a.id,ratId:pick});
   else render();
 }
 function ratOpts(rats){

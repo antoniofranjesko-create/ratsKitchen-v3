@@ -31,6 +31,7 @@ function startTurn(g) {
   p._hitZones = {};
   p._sowUsed = false;
   p._bredThisTurn = false;
+  p._fed = {};             // rats fed this turn (once per rat per turn)
 
   // 1) resolve YOUR lingering cards placed last turn (card-as-token): Hot Chilli detonates now
   for (const q of g.players) {
@@ -46,16 +47,15 @@ function startTurn(g) {
     // Pelican Delivery you placed lands now: top bin rat drops into that kitchen
     if (q._pelicanBy === p.id) {
       q._pelicanBy = null;
-      let idx = -1;
-      for (let i = g.bins.length - 1; i >= 0; i--) { if (g.bins[i].rat) { idx = i; break; } }
-      if (idx >= 0) {
-        const b = g.bins.splice(idx, 1)[0];
+      const b = E.takeFromAlley(g, q._pelicanPick);
+      q._pelicanPick = null;
+      if (b) {
         if (E.ratEnters(g, q, b.rat)) {
           E.logAdd(g, `The pelican drops a ${b.rat.name} into ${q.name}'s kitchen.`);
           if (E.checkWin(g, q)) return;
         }
       } else {
-        E.logAdd(g, `The pelican arrives at ${q.name}'s kitchen — but the bins are empty.`);
+        E.logAdd(g, `The pelican arrives at ${q.name}'s kitchen — but the alley is empty.`);
       }
     }
   }
@@ -150,11 +150,10 @@ function flipMarketDay(g) {
         const minCards = Math.min(...pool.map(q => q.hand.length));
         pool = pool.filter(q => q.hand.length === minCards);
       }
-      let idx = -1; for (let i = g.bins.length - 1; i >= 0; i--) { if (g.bins[i].rat) { idx = i; break; } }
-      if (pool.length === 1 && idx >= 0) {
+      if (pool.length === 1 && g.alley.length) {
         const cand = pool[0];
-        const b = g.bins.splice(idx, 1)[0];
-        if (E.ratEnters(g, cand, b.rat)) { E.logAdd(g, `Rat Release: ${cand.name} (fewest rats) takes a ${b.rat.name} from the bins.`); E.checkWin(g, cand); }
+        const b = E.takeFromAlley(g, null);
+        if (E.ratEnters(g, cand, b.rat)) { E.logAdd(g, `Rat Release: ${cand.name} (fewest rats) takes a ${b.rat.name} from the alley.`); E.checkWin(g, cand); }
       } else {
         // still tied (or no bin rat): each tied player draws from the deck
         E.logAdd(g, `Rat Release: tied on rats and cards — ${pool.map(q=>q.name).join(', ')} each draw from the deck.`);
@@ -300,11 +299,14 @@ function legalActions(g, p) {
     // ---- rat trap ----
     if (t === 'rattrap' && true)
       push({ id: c.id, type: t, needsTarget: true, targets: [...opps.map(o => o.id), p.id], label: 'Rat Trap' });
-    // ---- special delivery: top bins rat → you ----
-    if (t === 'delivery' && true && g.bins.some(b => b.rat) && canGainRat(p) && !p._playedRat)
-      push({ id: c.id, type: t, label: 'Special Delivery (top bins rat → you)' });
+    // ---- special delivery: take any alley rat → you ----
+    if (t === 'delivery' && g.alley.length && canGainRat(p) && !p._playedRat)
+      push({ id: c.id, type: t, needsAlleyRat: true, label: 'Special Delivery (take an alley rat)' });
+    // ---- dodgy inspector: lose a star, take any alley rat ----
+    if (t === 'desperate' && p.stars >= 2 && g.alley.length && canGainRat(p) && !p._playedRat)
+      push({ id: c.id, type: t, needsAlleyRat: true, label: 'Dodgy Inspector (-1 star → alley rat)' });
     // ---- pelican delivery: delayed Special Delivery on YOUR OWN kitchen ----
-    if (t === 'pelican' && g.bins.some(b => b.rat) && !p._pelicanBy)
+    if (t === 'pelican' && g.alley.length && !p._pelicanBy)
       push({ id: c.id, type: t, label: 'Pelican Delivery (bins rat arrives next turn)' });
     // ---- trash diver: take one of the last 3 discards ----
     if (t === 'recycle' && true && g.discard.length)
@@ -347,21 +349,34 @@ function legalActions(g, p) {
   // 2 Food -> 1 star
   if (!capped && p.hand.filter(c => c.card === 'food').length >= 2 && p.stars < E.STARS)
     push({ type: 'food_heal', label: 'Spend 2 Food (+1 star)' });
-  // eat: Larder Rat eats itself free; any rat only if you hold Last Resort
+  // Last Resort still eats any rat for stars = weight
   if (!capped) {
-    const larder = p.rats.find(r => r.prop === 'free_eat');
-    if (larder) push({ type: 'eat_larder', ratId: larder.id, label: 'Eat the Larder Rat (free, +1 star)' });
     const hasLR = p.hand.find(c => c.card === 'lastresort');
     if (hasLR && p.rats.length) push({ id: hasLR.id, type: 'eat_lastresort', needsRat: true, label: 'Last Resort — eat a rat (+stars = weight)' });
   }
-  // Breeder Rat: once/turn, spend 2 Food to take the top bins rat
+  // Breeder Rat: FREE once per turn — take any rat from the Alley
   if (!p._bredThisTurn && p.rats.some(r => r.prop === 'breed')
-      && p.hand.filter(c => c.card === 'food').length >= 2
-      && g.bins.some(b => b.rat) && canGainRat(p) && !p._playedRat)
-    push({ type: 'breed', label: 'Breeder: spend 2 Food → top bins rat' });
-  // Sow Rat: once per turn you may draw instead of playing
-  if (!p._sowUsed && p.rats.some(r => r.prop === 'draw_or_play'))
-    push({ type: 'sow_draw', label: 'Sow: draw a card' });
+      && g.alley.length && canGainRat(p) && !p._playedRat)
+    push({ type: 'breed', needsAlleyRat: true, label: 'Breeder: take an alley rat (free)' });
+
+  // ── FEEDING ───────────────────────────────────────────────────────────────
+  // Runner, Sow, Larder and Spice have a FED ability costing 1 Food, once per
+  // turn per rat. Immunity rats (Feral/Boiler/Sewer/Alpha, Spice's chilli
+  // immunity) stay free passives — that is what the rat IS.
+  if (p.hand.some(c => c.card === 'food')) {
+    p._fed = p._fed || {};
+    for (const r of p.rats) {
+      if (p._fed[r.id]) continue;
+      if (r.prop === 'feed_draw')
+        push({ type: 'feed', ratId: r.id, feed: 'draw',  label: 'Feed the Runner (1 Food → draw 1)' });
+      if (r.prop === 'feed_draw2')
+        push({ type: 'feed', ratId: r.id, feed: 'draw2', label: 'Feed the Sow (1 Food → draw 2)' });
+      if (r.prop === 'feed_eat' && p.stars < E.STARS)
+        push({ type: 'feed', ratId: r.id, feed: 'eat',   label: 'Feed the Larder (1 Food → eat it, +1 star)' });
+      if (r.prop === 'no_explode' && p.rats.some(x => x._chilliBy))
+        push({ type: 'feed', ratId: r.id, feed: 'spice', label: 'Feed the Spice Rat (1 Food → clear a Hot Chilli)' });
+    }
+  }
   // end turn
   push({ type: 'end', label: 'End turn' });
   return acts;
@@ -407,12 +422,6 @@ function apply(g, p, act, targetId, ratId) {
       p.hand = p.hand.filter(c => { if (c.card === 'food' && removed < 2) { g.discard.push(c); removed++; return false; } return true; });
       p.stars = Math.min(E.STARS, p.stars + 1); p._actedBuild = true;
       E.logAdd(g, `${p.name} spends 2 Food for a star.`); break;
-    }
-    case 'eat_larder': {
-      const r = p.rats.find(x => x.prop === 'free_eat'); if (!r) break;
-      p.rats = p.rats.filter(x => x.id !== r.id); g.bins.push({ id: r.id, rat: r });
-      p.stars = Math.min(E.STARS, p.stars + r.w); p._actedBuild = true;
-      E.logAdd(g, `${p.name} eats the Larder Rat for ${r.w} star.`); break;
     }
     case 'eat_lastresort': {
       const r = p.rats.find(x => x.id === ratId); if (!r) break;
@@ -505,10 +514,20 @@ function apply(g, p, act, targetId, ratId) {
     case 'rattrap': { bin(takeCard(act.id)); t._rattrap = p.id; p._actedBuild = true; E.logAdd(g, `${p.name} sets a Rat Trap on ${t.name}.`); break; }
     case 'delivery': {
       bin(takeCard(act.id));
-      // take the TOP rat of the bins (no choosing)
-      let idx = -1;
-      for (let i = g.bins.length - 1; i >= 0; i--) { if (g.bins[i].rat) { idx = i; break; } }
-      if (idx >= 0) { const b = g.bins.splice(idx, 1)[0]; if (E.ratEnters(g, p, b.rat)) { p._ratsIn++; p._playedRat = true; } E.logAdd(g, `${p.name} takes the top bins rat — a ${b.rat.name}.`); }
+      // take ANY rat from the Alley (3 face-up) — a real choice
+      const b = E.takeFromAlley(g, ratId);
+      if (b) { if (E.ratEnters(g, p, b.rat)) { p._ratsIn++; p._playedRat = true; } E.logAdd(g, `${p.name} takes a ${b.rat.name} from the alley.`); }
+      p._actedBuild = true; break;
+    }
+    case 'desperate': {
+      bin(takeCard(act.id));
+      E.damage(g, p, 1);
+      if (!p.alive) break;
+      const lb = E.takeFromAlley(g, ratId);
+      if (lb && E.ratEnters(g, p, lb.rat)) {
+        p._ratsIn++; p._playedRat = true;
+        E.logAdd(g, `The Dodgy Inspector docks ${p.name} a star — and looks away while they take a ${lb.rat.name}.`);
+      }
       p._actedBuild = true; break;
     }
     case 'pelican': {
@@ -577,23 +596,35 @@ function apply(g, p, act, targetId, ratId) {
     }
     case 'inherit': { bin(takeCard(act.id)); t._inheritBy = p.id; p._actedBuild = true; E.logAdd(g, `${p.name} places Inheritance on ${t.name}.`); break; }
     case 'breed': {
-      // spend 2 Food from hand
-      let spent = 0;
-      p.hand = p.hand.filter(c => { if (c.card === 'food' && spent < 2) { spent++; g.discard.push(c); return false; } return true; });
-      // take the TOP rat of the bins
-      let idx = -1;
-      for (let i = g.bins.length - 1; i >= 0; i--) { if (g.bins[i].rat) { idx = i; break; } }
-      if (idx >= 0) {
-        const b = g.bins.splice(idx, 1)[0];
-        if (E.ratEnters(g, p, b.rat)) { p._ratsIn++; p._playedRat = true; E.logAdd(g, `${p.name}'s Breeder produces a ${b.rat.name} (2 Food spent).`); }
+      const b = E.takeFromAlley(g, ratId);
+      if (b && E.ratEnters(g, p, b.rat)) {
+        p._ratsIn++; p._playedRat = true;
+        E.logAdd(g, `${p.name}'s Breeder takes a ${b.rat.name} from the alley.`);
       }
       p._bredThisTurn = true; p._actedBuild = true; break;
     }
-    case 'sow_draw': {
-      p._sowUsed = true;
-      const c = E.drawCard(g);
-      if (c) resolveDraw(g, p, c, true);
-      E.logAdd(g, `${p.name} works the Sow for an extra draw.`); break;
+    case 'feed': {
+      // pay 1 Food
+      let paid = false;
+      p.hand = p.hand.filter(c => { if (!paid && c.card === 'food') { paid = true; g.discard.push(c); return false; } return true; });
+      if (!paid) break;
+      const fr = p.rats.find(x => x.id === (act.ratId || ratId));
+      if (!fr) break;
+      p._fed = p._fed || {}; p._fed[fr.id] = true;
+      if (act.feed === 'draw' || act.feed === 'draw2') {
+        const n = act.feed === 'draw2' ? 2 : 1;
+        for (let k = 0; k < n; k++) { const c = E.drawCard(g); if (c) resolveDraw(g, p, c, true); if (g.over || !p.alive) return; }
+        E.logAdd(g, `${p.name} feeds the ${fr.name} — draws ${n}.`);
+      } else if (act.feed === 'eat') {
+        p.rats = p.rats.filter(x => x.id !== fr.id);
+        g.bins.unshift({ id: fr.id, rat: fr });
+        p.stars = Math.min(E.STARS, p.stars + 1);
+        E.logAdd(g, `${p.name} feeds the ${fr.name}, then eats it — back to ${p.stars} stars.`);
+      } else if (act.feed === 'spice') {
+        const victim = p.rats.find(x => x._chilliBy);
+        if (victim) { victim._chilliBy = null; E.logAdd(g, `${p.name} feeds the Spice Rat — the chilli on their ${victim.name} is smothered.`); }
+      }
+      p._actedBuild = true; break;
     }
     case 'fire_wait': case 'fire_blocked': break;   // display-only hints
     case 'end': break;
@@ -619,6 +650,7 @@ function botTurn(g) {
     if (!choice || choice.type === 'end') break;
     let target = null, ratId = null;
     if (choice.needsTarget) target = botTarget(g, p, choice);
+    if (choice.needsAlleyRat) ratId = botAlleyPick(g);
     if (choice.needsRat) {
       // for Exterminator the rat comes from the TARGET kitchen; otherwise from own rats
       if (choice.type === 'exterm') {
@@ -677,14 +709,13 @@ function botChoose(g, p, acts) {
   // 2. defend: heal / board up if under lethal threat
   if (threat >= p.stars) {
     if (has('food_heal')) return has('food_heal');
-    if (has('eat_larder')) return has('eat_larder'); if (has('eat_lastresort')) return has('eat_lastresort');
+    if (has('eat_lastresort')) return has('eat_lastresort');
     if (has('boardup')) return has('boardup');
   }
   // 2b. top up when wounded even if not facing lethal damage right now —
   // otherwise Food/Last Resort effectively never get played.
   if (p.stars < E.STARS && (threat > 0 || p.stars <= E.STARS - 2)) {
     if (has('food_heal')) return has('food_heal');
-    if (has('eat_larder')) return has('eat_larder');
     // Last Resort is a real cost (you lose the rat), so only when properly hurt
     if (p.stars <= 2 && has('eat_lastresort')) return has('eat_lastresort');
   }
@@ -697,13 +728,16 @@ function botChoose(g, p, acts) {
   // 4. race if safe and close
   if (gap <= 2 && threat === 0) {
     if (has('delivery')) return has('delivery');
+    if (has('breed')) return has('breed');
+    if (has('feed')) return has('feed');
+    if (has('desperate') && threat === 0 && p.stars >= 3 && E.weight(p) < E.THRESHOLD - 1) return has('desperate');
     if (has('poach')) return has('poach');
   }
   // 5. productive plays first — grow your own kitchen
   if (has('delivery')) return has('delivery');
-  // Breeder: convert spare Food into a rat when safe and healthy enough not to
-  // need that Food for healing (stars at/near full, no live threat).
-  if (has('breed') && threat === 0 && p.stars >= E.STARS - 1) return has('breed');
+  if (has('breed')) return has('breed');
+  if (has('feed')) return has('feed');
+  if (has('desperate') && threat === 0 && p.stars >= 3 && E.weight(p) < E.THRESHOLD - 1) return has('desperate');
   if (has('poach')) return has('poach');
   // 6. grease a genuinely threatening armed rival
   if (has('grease')) return has('grease');
@@ -724,12 +758,15 @@ function botChoose(g, p, acts) {
   if (has('gambit')) return has('gambit');
   if (has('klepto')) return has('klepto');
   if (has('shakedown')) return has('shakedown');
-  if (has('sow_draw')) return has('sow_draw');
   if (has('rattrap')) return has('rattrap');
   if (has('pelican')) return has('pelican');
   return has('end');
 }
 
+function botAlleyPick(g) {
+  const best = g.alley.slice().sort((a, b) => (b.rat.w - a.rat.w) || (a.rat.heat - b.rat.heat))[0];
+  return best ? best.rat.id : null;
+}
 function botTarget(g, p, act) {
   const cands = act.targets.map(id => g.players.find(x => x.id === id)).filter(Boolean);
   if (!cands.length) return null;

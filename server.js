@@ -32,6 +32,10 @@ function project(g, viewerId) {
       return active && active.bot;
     })(),
     binsRats: g.bins.filter(b => b.rat).length,
+    // THE ALLEY — 3 face-up rats
+    alley: (g.alley||[]).map(c => ({ id:c.rat.id, kind:c.rat.kind, name:c.rat.name,
+      w:c.rat.w, heat:c.rat.heat, col:c.rat.col, prop:c.rat.prop,
+      desc:(E.RATS[c.rat.kind]&&E.RATS[c.rat.kind].desc)||'' })),
     deckLeft: g.deck.length,
     // Market Day: the event flipped for the current round (null before any flip).
     market: g.market ? { event: g.market.event, name: g.market.name, desc: g.market.desc } : null,
@@ -233,7 +237,7 @@ io.on('connection', (socket) => {
   });
 });
 
-const VERSION = '3.9.5';
+const VERSION = '4.0.0';
 app.get('/version', (req, res) => res.json({ version: VERSION }));
 
 const PORT = process.env.PORT || 3000;
