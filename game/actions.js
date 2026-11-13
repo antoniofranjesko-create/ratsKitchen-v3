@@ -307,7 +307,7 @@ function legalActions(g, p) {
       push({ id: c.id, type: t, needsAlleyRat: true, label: 'Dodgy Inspector (-1 star → alley rat)' });
     // ---- pelican delivery: delayed Special Delivery on YOUR OWN kitchen ----
     if (t === 'pelican' && g.alley.length && !p._pelicanBy)
-      push({ id: c.id, type: t, label: 'Pelican Delivery (bins rat arrives next turn)' });
+      push({ id: c.id, type: t, label: 'Pelican Delivery (alley rat arrives next turn)' });
     // ---- trash diver: take one of the last 3 discards ----
     if (t === 'recycle' && true && g.discard.length)
       push({ id: c.id, type: t, label: 'Recycle Day (recover a card)' });

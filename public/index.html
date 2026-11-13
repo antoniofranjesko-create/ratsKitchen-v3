@@ -238,6 +238,11 @@ button:disabled{opacity:.35;cursor:not-allowed}
 .np-fresh{animation:npflash .5s ease}
 @keyframes npflash{0%{transform:scale(1.15);filter:brightness(1.5)}100%{transform:scale(1);filter:none}}
 .stepwrap{padding:0 12px 12px}
+.stepmode{width:100%;font-size:12px;padding:8px;letter-spacing:1px}
+.stall-name .offline{font-family:'Barlow Condensed';font-size:10px;letter-spacing:2px;color:#e0794a;
+  border:1px solid #e0794a;border-radius:3px;padding:1px 5px;margin-left:6px;vertical-align:middle}
+.botify{font-size:11px;padding:4px 8px;margin-left:6px;min-height:0}
+.sharelink{font-size:11px;color:var(--ash);word-break:break-all;margin-top:6px}
 .step{width:100%;background:var(--lamp);color:var(--grease);font-size:15px;padding:12px}
 .step:hover{filter:brightness(1.12)}
 .market-banner{margin:0 12px 10px;padding:11px 15px;border:1px solid var(--lamp-dim);
@@ -330,7 +335,7 @@ button:disabled{opacity:.35;cursor:not-allowed}
 <body>
 <div class="topbar">
   <div class="brand">RAT'S <b>KITCHEN</b></div>
-  <div class="meta"><span class="build">BUILD v4.0.0</span></div>
+  <div class="meta"><span class="build">BUILD v4.0.1</span></div>
 </div>
 
 <div id="lobby" class="wrap">
@@ -350,6 +355,7 @@ button:disabled{opacity:.35;cursor:not-allowed}
         <div><div class="tag">Table code</div><div class="codebox" id="roomCode"></div></div>
         <div class="tag">Share it to let others in</div>
       </div>
+      <div class="sharelink" id="shareLink"></div>
       <div id="roomPlayers" class="lobby-seats"></div>
       <div class="row"><button id="btnBot" class="ghost">+ Add bot</button><button id="btnStart">Start game</button></div>
       <div class="tag" style="margin-top:10px">2–8 players · bots play the tuned strategy</div>
@@ -371,6 +377,8 @@ button:disabled{opacity:.35;cursor:not-allowed}
           <div id="nowPlaying" class="nowplaying"></div>
           <div id="stepWrap" class="stepwrap hidden">
             <button id="btnStep" class="step">▶ Next player</button>
+          </div>
+          <div class="stepwrap"><button id="btnStepMode" class="ghost stepmode">Bots: auto</button>
           </div>
         </div>
         <div class="panel"><div class="panel-h">The bins &amp; deck</div>
@@ -408,25 +416,36 @@ button:disabled{opacity:.35;cursor:not-allowed}
 const socket = io();
 let YOU=null, STATE=null, picking=null, selectedCardId=null, pendingGambit=null;
 const $=id=>document.getElementById(id);
+// Seat token: kept in this browser so a refresh, a sleeping phone or a dropped
+// connection puts you straight back in your seat with your hand.
+const store={get(k){try{return localStorage.getItem(k)}catch(e){return null}},
+             set(k,v){try{localStorage.setItem(k,v)}catch(e){}},
+             del(k){try{localStorage.removeItem(k)}catch(e){}}};
+const TOKEN=(()=>{let t=store.get('rk_token');if(!t){t=Math.random().toString(36).slice(2)+Date.now().toString(36);store.set('rk_token',t)}return t})();
+socket.on('connect',()=>{const c=store.get('rk_room'); if(c) socket.emit('rejoin',{code:c,token:TOKEN});});
+socket.on('rejoinFail',()=>store.del('rk_room'));
+// a link like ?table=ABCD fills in the table code
+try{const q=new URLSearchParams(location.search).get('table'); if(q) setTimeout(()=>{$('code').value=q.toUpperCase();},0);}catch(e){}
 const RAT_ART={plain:'🐀',runner:'🐀',fat:'🐀',sow:'🐀',alpha:'👑',sewer:'🐀',toll:'🐀',feral:'🐀',spice:'🐀',boiler:'🐀',larder:'🐀',grub:'🐛',breeder:'🍼',ratato:'🥔',hotrat:'🌡️'};
 const CARD_ART={mole:'🦫',sched1:'🦅',sched2:'🦅',wd_snap:'🦅',wd_snap2:'🦅',wd_mole:'🦫',poach:'🎣',ratato:'🥔',hotrat:'🌡️',switch:'🔄',hotratato:'🥔',chilli:'🌶️',territorial:'🚧',grease:'💰',food:'🍜',cat:'🐱',wok:'🍳',boardup:'🔨',rattrap:'🪤',delivery:'🚚',pelican:'🦩',recycle:'♻️',exterm:'🧯',inherit:'📜',desperate:'🕵',gambit:'🎴',klepto:'🧤',shakedown:'💢',lastresort:'🍽️',misc:'🎲'};
 const CARD_CLS={mole:'attack',sched1:'attack',sched2:'attack',wd_snap:'drawn',wd_snap2:'drawn',wd_mole:'drawn',poach:'attack',ratato:'attack',ratato_rat:'attack',switch:'attack',hotratato:'attack',hotrat:'attack',chilli:'attack',territorial:'control',grease:'attack',klepto:'attack',shakedown:'attack',food:'buff',cat:'defence',wok:'defence',boardup:'defence',lastresort:'buff',rattrap:'engine',delivery:'engine',pelican:'engine',recycle:'engine',exterm:'engine',inherit:'engine',desperate:'engine',gambit:'engine',misc:'drawn'};
 const CARD_TYPE={attack:'Attack',defence:'Defence',engine:'Engine',control:'Control',nerf:'Nerf',buff:'Buff',drawn:'When drawn'};
 
-$('btnCreate').onclick=()=>socket.emit('create',{name:$('name').value.trim()});
-$('btnJoin').onclick=()=>socket.emit('join',{code:$('code').value.trim().toUpperCase(),name:$('name').value.trim()});
+$('btnCreate').onclick=()=>socket.emit('create',{name:$('name').value.trim(),token:TOKEN});
+$('btnJoin').onclick=()=>socket.emit('join',{code:$('code').value.trim().toUpperCase(),name:$('name').value.trim(),token:TOKEN});
 $('btnBot').onclick=()=>socket.emit('addBot');
 $('btnStart').onclick=()=>socket.emit('start');
 $('playAgainBtn').onclick=()=>{ $('winner').classList.add('hidden'); socket.emit('restart'); };
-$('exitBtn').onclick=()=>location.reload();
+$('exitBtn').onclick=()=>{ store.del('rk_room'); location.href=location.pathname; };
 
 socket.on('room',r=>{
   if(r.you) YOU=r.you;
   $('joinForms').classList.add('hidden');
   $('roomBox').classList.remove('hidden');
-  if(r.code) $('roomCode').textContent=r.code;
+  if(r.code){ $('roomCode').textContent=r.code; store.set('rk_room',r.code);
+    $('shareLink').textContent=location.origin+location.pathname+'?table='+r.code; }
   $('roomPlayers').innerHTML=r.players.map(p=>
-    `<div class="lobby-seat"><span class="dot"></span>${esc(p.name)}${p.bot?'<span class="bt">BOT</span>':(p.id===YOU?'<span class="bt">YOU</span>':'')}</div>`).join('');
+    `<div class="lobby-seat"><span class="dot"></span>${esc(p.name)}${p.bot?'<span class="bt">BOT</span>':(p.id===YOU?'<span class="bt">YOU</span>':'')}${(!p.bot&&p.connected===false)?'<span class="bt">OFFLINE</span>':''}</div>`).join('');
 });
 socket.on('err',m=>{$('errBox').textContent=m;setTimeout(()=>$('errBox').textContent='',3500)});
 socket.on('begin',()=>{$('lobby').classList.add('hidden');$('game').classList.remove('hidden')});
@@ -615,9 +634,12 @@ function renderNowPlaying(){
   const wrap=$('stepWrap');
   if(STATE.awaitingStep && !STATE.over){ wrap.classList.remove('hidden'); }
   else { wrap.classList.add('hidden'); }
+  const sm=$('btnStepMode'); if(sm) sm.textContent = STATE.stepMode ? 'Bots: step (tap to auto)' : 'Bots: auto (tap to step)';
 }
 function shortCardName(n){return n.replace('Health Inspection','H.I.')}
 $('btnStep')&&($('btnStep').onclick=()=>socket.emit('stepBot'));
+$('btnStepMode')&&($('btnStepMode').onclick=()=>socket.emit('setStep',{on:!(STATE&&STATE.stepMode)}));
+function botify(id){ socket.emit('botify',{playerId:id}); }
 function stallHTML(p){
   const cls=['stall'];
   if(p.id===STATE.active&&!STATE.over) cls.push('active');
@@ -650,7 +672,7 @@ function stallHTML(p){
   pips.push(`<span class="pip hand">${p.handCount} cards</span>`);
   const turnflag=(p.id===STATE.active&&!STATE.over)?'<span class="turn-flag"><span class="pulse"></span>to act</span>':'';
   return `<div class="${cls.join(' ')}" data-id="${p.id}">
-    <div class="stall-head"><span class="stall-name">${esc(p.name)}${p.bot?'<span class="bot">BOT</span>':''}</span>${turnflag}</div>
+    <div class="stall-head"><span class="stall-name">${esc(p.name)}${p.bot?'<span class="bot">BOT</span>':''}${(!p.bot&&p.connected===false)?'<span class="offline">OFFLINE</span>':''}</span>${(!p.bot&&p.connected===false&&p.id!==STATE.you&&p.alive)?`<button class="ghost botify" onclick="event.stopPropagation();botify('${p.id}')">Hand to a bot</button>`:''}${turnflag}</div>
     <div class="stats">
       <div class="stat"><span class="k">Stars</span><span class="stars">${bulbs}</span></div>
       <div class="king"><div class="k"><span>Rat King</span><b>${p.weight} / ${STATE.threshold}</b></div>
@@ -753,7 +775,7 @@ function playVerb(a,card){
   const map={mole:'Inspect (snap, -1 star)',sched1:'Arm inspection',sched2:'Arm 2-colour inspection',
     poach:'Poach a rat',ratato:'Dump a rat',hotratato:'Ratata Quente — dump a rat',switch:'Swap a rat',chilli:'Explode a rat',
     territorial:'Mark territorial',grease:'Grease their inspector',boardup:'Board up',cat:'Shield a rat',wok:'Ready a Wok block',
-    rattrap:'Set a rat trap',pelican:'Send the pelican',delivery:'Take top bins rat',recycle:'Recycle a discard',
+    rattrap:'Set a rat trap',pelican:'Send the pelican',delivery:'Take an alley rat',recycle:'Recycle a discard',
     exterm:'Exterminate a rat',inherit:'Place Inheritance',desperate:'Dodgy Inspector (-1 star)',feed:'Feed the rat (1 Food)',breed:'Breeder: take alley rat',gambit:'Look at top 3',klepto:'Lift a card',shakedown:'Shake down for a card',
     lastresort:'Eat a rat for stars',food_heal:'Spend 2 Food (+star)',breed:'Breeder: 2 Food → rat',misc:'Do the odd job'};
   return map[a.type]||a.label;

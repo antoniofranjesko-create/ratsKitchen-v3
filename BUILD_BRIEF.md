@@ -6,12 +6,13 @@ before touching code.
 ## 0. The job
 
 Koko wants to play Rat's Kitchen online with friends to playtest it, and
-collect data on how people actually play. Starting from **v4.0.0** (in this
+collect data on how people actually play. Starting from **v4.0.1** (in this
 repo), build **v4.1.0**:
 
 - **A. Play-data logging** with a **download button**. No survey.
 - **B. A rebuilt web client**, mobile-first, that friends can join from a link.
-- **C. The online-play fixes** that block phone play today (rejoin, bot pacing).
+- **C. Online-play fixes** — already done in v4.0.1 (section 6). Keep them
+  working in the new client.
 
 **Do not change the game.** Rules, numbers, card text and bot policy are
 locked. If you find a game bug, write it down and ask Koko; don't fix it
@@ -20,8 +21,8 @@ silently.
 ## 1. Where things are
 
 - Repo: `github.com/antoniofranjesko-create/ratsKitchen-v3` (public, branch
-  `main`). Latest commit should be **v4.0.0**. If HEAD is still v3.9.5, stop
-  and tell Koko: he hasn't pushed v4.0.0 yet.
+  `main`). Latest commit should be **v4.0.1** (or v4.0.0). If HEAD is still
+  v3.9.5, stop and tell Koko: he hasn't pushed v4 yet.
 - This session can almost certainly **read but not push**. Deliver one zip
   (folder structure intact) plus exact git commands. Koko pushes from
   `/mnt/c/Users/anton/Downloads/files8_v3` (WSL bash). Render auto-deploys on
@@ -164,8 +165,7 @@ Every flow in the old client must exist in the new one. Show Koko the list.
 
 ### Must-have
 - **Lobby:** create or join a room by code, add bots, seat list, start.
-  Sharing a link with the room code in it should take friends straight to
-  the join screen.
+  The share link (`?table=CODE`) fills in the code — keep it.
 - **Table:** your kitchen (rats with colour, weight, heat and ability
   markers); rivals in a compact view (stars, weight out of 7, rats, hand
   count, armed inspection, placed cards such as Territorial, Rat Trap,
@@ -192,19 +192,30 @@ Every flow in the old client must exist in the new one. Show Koko the list.
 - Touch targets at least 44px, no sideways scrolling, usable one-handed in
   portrait, also good in landscape and on desktop.
 
-## 6. Part C — online-play fixes (server only)
+## 6. Part C — online-play fixes (DONE in v4.0.1 — keep them working)
 
-1. **Rejoin.** Today the player id is created per socket connection, so a
-   page refresh, a dropped connection or a phone going to sleep loses that
-   player's seat for the rest of the game. Give each player a token kept in
-   `localStorage`, and let them reclaim their seat on reconnect, mid-game
-   included. If someone is gone for good, the host can hand their seat to a
-   bot.
-2. **Bot pacing.** Bots only move when someone presses "Next player" (step
-   mode). For online games, auto-advance bots with a short delay (~1.5 s per
-   action) so humans can follow; keep step mode as a toggle.
-3. First load after 15 idle minutes takes about a minute on Render's free
-   tier. Show a "waking the server" message rather than a blank page.
+Built and tested on 13 Nov with two real browsers plus a bot. The new client
+must support all of it:
+
+- **Seat token.** The client keeps `rk_token` and the current table code
+  `rk_room` in `localStorage`. `create` and `join` send `{name, token}`. On
+  every socket `connect` the client emits `rejoin {code, token}`; the server
+  re-attaches the seat (lobby or mid-game) and re-sends `room`, `begin` and
+  `state`, or replies `rejoinFail` (client forgets the table). Exit to menu
+  clears `rk_room`.
+- **Offline seats.** A disconnect mid-game keeps the seat. `state.players[i].connected`
+  is false while they're gone; the old client shows an OFFLINE badge and a
+  "Hand to a bot" button, which emits `botify {playerId}`. Any connected
+  human may do this for an offline seat; if it was their turn, the bot
+  finishes it. In the lobby an offline seat is held 30 s, then dropped.
+- **Bots auto-advance** with a pause per bot turn (`BOT_DELAY_MS`, default
+  1500). `setStep {on}` toggles step mode; `state.stepMode` and
+  `state.awaitingStep` drive the "Next player" button and the toggle label.
+- **Lobby "YOU"** — each socket now gets its own id in `room` (it used to
+  receive the newest joiner's id).
+- Render's free tier holds the first request for about a minute after 15
+  idle minutes; the app can't show anything during that. Tell Koko to warn
+  friends the first load can be slow.
 
 ## 7. Testing
 
@@ -242,7 +253,7 @@ back Russian Roulette as a card; the Magawa game.
    git status
    # copy the new files in, then:
    git add -A
-   git commit -m "v4.1.0: play-data logging, mobile client, rejoin, bot pacing"
+   git commit -m "v4.1.0: play-data logging, mobile client"
    git push
    ```
 4. A short note: what changed, sweep before and after, the art filenames,

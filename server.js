@@ -14,12 +14,28 @@ const io = new Server(server, { cors: { origin: '*' } });
 app.use(express.static(path.join(__dirname, 'public')));
 app.use(express.static(path.join(process.cwd(), 'public')));
 
-const rooms = {}; // code -> {players:[{id,name,bot,socket}], game, started}
+const rooms = {}; // code -> {players:[{id,name,bot,socket,token,connected}], game, started, stepMode, botTimer}
+
+// Pause between bot turns when bots auto-advance, so humans can follow the log.
+const BOT_DELAY_MS = process.env.BOT_DELAY_MS ? +process.env.BOT_DELAY_MS : 1500;
+// How long an empty lobby seat is kept for someone to reconnect before it's dropped.
+const LOBBY_GRACE_MS = 30000;
+
+// Lobby view, personalised: each socket is told its OWN id as "you".
+function lobbyPlayers(room) {
+  return room.players.map(p => ({ id: p.id, name: p.name, bot: p.bot, connected: p.bot || !!p.connected }));
+}
+function emitRoom(room) {
+  for (const pl of room.players) {
+    if (pl.socket) pl.socket.emit('room', { code: room.code, you: pl.id, stepMode: !!room.stepMode, players: lobbyPlayers(room) });
+  }
+}
 
 function code() { return Math.random().toString(36).slice(2, 6).toUpperCase(); }
 
 // project the game state for one viewer (their hand private, others' counts only)
-function project(g, viewerId) {
+function project(g, viewerId, room) {
+  const seat = id => room && room.players.find(x => x.id === id);
   return {
     over: g.over, winner: g.winner, active: g.players[g.active] && g.players[g.active].id,
     turn: g.turn, threshold: E.THRESHOLD, maxStars: E.STARS, anyElim: g._firstElimTurn != null, log: g.log.slice(-40),
@@ -27,10 +43,11 @@ function project(g, viewerId) {
     awaitingStep: (() => {
       // a step is available when the game isn't over, it's a bot's turn coming up,
       // and no human currently needs to act
-      if (g.over) return false;
+      if (g.over || !room || !room.stepMode) return false;   // bots auto-advance unless step mode is on
       const active = g.players[g.active];
       return active && active.bot;
     })(),
+    stepMode: !!(room && room.stepMode),
     binsRats: g.bins.filter(b => b.rat).length,
     // THE ALLEY — 3 face-up rats
     alley: (g.alley||[]).map(c => ({ id:c.rat.id, kind:c.rat.kind, name:c.rat.name,
@@ -43,6 +60,7 @@ function project(g, viewerId) {
     lastDiscards: (g.discard||[]).slice(-3).map(b => ({ id: b.id, card: b.card, name: (E.CARDS[b.card]&&E.CARDS[b.card].name)||b.card })),
     players: g.players.map(p => ({
       id: p.id, name: p.name, bot: p.bot, alive: p.alive,
+      connected: p.bot || !!(seat(p.id) && seat(p.id).connected),
       stars: p.stars, weight: E.weight(p), heat: E.heat(p), count: p.rats.length,
       // rats are public (zones are public) — show kind + colour, no ids to others
       rats: p.rats.map(r => ({ id: r.id, kind: r.kind, name: r.name, w: r.w, heat: r.heat, col: r.col, cols: r.cols||null, prop: r.prop, desc: (E.RATS[r.kind]&&E.RATS[r.kind].desc)||"", shielded: !!r._catShield, chilli: !!r._chilliBy })),
@@ -87,15 +105,16 @@ function project(g, viewerId) {
 
 function broadcast(room) {
   for (const pl of room.players) {
-    if (pl.socket) pl.socket.emit('state', project(room.game, pl.id));
+    if (pl.socket) pl.socket.emit('state', project(room.game, pl.id, room));
   }
 }
 
 // advance any bot turns until it's a human's turn or game over
 // Advance the game to the next actor. If it's a HUMAN, start their turn and wait.
 // If it's a BOT, start+play+end its turn, then STOP and wait for the human to step.
-function advance(room, autoBots) {
-  const g = room.game;
+function advance(room) {
+  const g = room.game; if (!g) return;
+  clearTimeout(room.botTimer); room.botTimer = null;
   let guard = 0;
   while (!g.over && guard++ < 5000) {
     const actor = g.players[g.active];
@@ -116,32 +135,108 @@ function advance(room, autoBots) {
       return;
     }
     broadcast(room);
-    if (!autoBots) return;   // stepping mode: one bot per step, then wait
+    // next actor is another bot: wait for "Next player" in step mode,
+    // otherwise play it after a short pause so humans can follow along
+    scheduleBot(room);
+    return;
   }
   if (!g.over && guard >= 5000) E.logAdd(g, 'Turn limit reached — please report.');
   broadcast(room);
 }
-function runBots(room) { advance(room, false); }   // default: step mode
+function scheduleBot(room) {
+  const g = room.game;
+  clearTimeout(room.botTimer); room.botTimer = null;
+  if (!g || g.over || room.stepMode) return;
+  room.botTimer = setTimeout(() => { if (room.game === g && !g.over) advance(room); }, BOT_DELAY_MS);
+}
+// Hand control onward after a human ends their turn (or the game starts).
+function runBots(room) {
+  const g = room.game; if (!g || g.over) return;
+  if (g.players[g.active].bot) {
+    if (room.stepMode) { broadcast(room); return; }   // wait for "Next player"
+    broadcast(room); scheduleBot(room); return;      // short pause, then the bot plays
+  }
+  advance(room);                                     // a human is next: start their turn
+}
 
 io.on('connection', (socket) => {
   let myRoom = null, myId = null;
 
-  socket.on('create', ({ name }) => {
+  // Re-attach this socket to an existing seat (refresh, phone sleep, network drop).
+  function attach(room, pl) {
+    clearTimeout(pl.graceTimer); pl.graceTimer = null;
+    pl.socket = socket; pl.connected = true;
+    myId = pl.id; myRoom = room.code;
+    socket.join(room.code);
+    emitRoom(room);
+    if (room.started && room.game) {
+      socket.emit('begin', {});
+      broadcast(room);
+    }
+  }
+
+  socket.on('create', ({ name, token }) => {
     const c = code();
     myId = E.rid();
-    rooms[c] = { code: c, players: [{ id: myId, name: name || 'Host', bot: false, socket }], game: null, started: false };
+    rooms[c] = { code: c, players: [{ id: myId, name: name || 'Host', bot: false, socket, token: token || null, connected: true }],
+                 game: null, started: false, stepMode: false, botTimer: null };
     myRoom = c;
     socket.join(c);
-    socket.emit('room', { code: c, you: myId, players: rooms[c].players.map(p => ({ id: p.id, name: p.name, bot: p.bot })) });
+    emitRoom(rooms[c]);
   });
 
-  socket.on('join', ({ code: c, name }) => {
+  socket.on('join', ({ code: c, name, token }) => {
     const room = rooms[c];
-    if (!room || room.started) { socket.emit('err', 'No such open room.'); return; }
+    if (!room) { socket.emit('err', 'No such table.'); return; }
+    // same browser coming back? give it its seat again
+    const mine = token && room.players.find(p => !p.bot && p.token === token);
+    if (mine) { attach(room, mine); return; }
+    if (room.started) { socket.emit('err', 'That game has already started.'); return; }
+    if (room.players.length >= 8) { socket.emit('err', 'That table is full.'); return; }
     myId = E.rid(); myRoom = c;
-    room.players.push({ id: myId, name: name || 'Player', bot: false, socket });
+    room.players.push({ id: myId, name: name || 'Player', bot: false, socket, token: token || null, connected: true });
     socket.join(c);
-    io.to(c).emit('room', { code: c, you: myId, players: room.players.map(p => ({ id: p.id, name: p.name, bot: p.bot })) });
+    emitRoom(room);
+  });
+
+  socket.on('rejoin', ({ code: c, token }) => {
+    const room = rooms[c];
+    const mine = room && token && room.players.find(p => !p.bot && p.token === token);
+    if (!mine) { socket.emit('rejoinFail', {}); return; }
+    attach(room, mine);
+  });
+
+  // Hand a seat whose player has dropped out to a bot, so the game can go on.
+  socket.on('botify', ({ playerId }) => {
+    const room = rooms[myRoom]; if (!room) return;
+    const me = room.players.find(p => p.id === myId);
+    if (!me || me.bot || !me.connected) return;
+    const pl = room.players.find(p => p.id === playerId);
+    if (!pl || pl.bot || pl.connected) return;        // only seats that have gone offline
+    pl.bot = true; pl.token = null; pl.socket = null;
+    const g = room.game;
+    if (!g) { emitRoom(room); return; }
+    const gp = g.players.find(p => p.id === playerId);
+    if (gp) gp.bot = true;
+    E.logAdd(g, `${pl.name} has left — a bot takes over their stall.`);
+    emitRoom(room);
+    if (!g.over && gp && g.players[g.active] === gp && gp.alive) {
+      A.botTurn(g);                 // their turn had already started: let the bot finish it
+      A.endTurn(g);
+      runBots(room);
+    } else {
+      broadcast(room);
+    }
+  });
+
+  socket.on('setStep', ({ on }) => {
+    const room = rooms[myRoom]; if (!room) return;
+    room.stepMode = !!on;
+    emitRoom(room);
+    if (room.game && !room.game.over) {
+      if (room.stepMode) { clearTimeout(room.botTimer); room.botTimer = null; broadcast(room); }
+      else runBots(room);
+    }
   });
 
   socket.on('addBot', () => {
@@ -155,6 +250,7 @@ io.on('connection', (socket) => {
     const room = rooms[myRoom]; if (!room || room.started) return;
     if (room.players.length < 2) { socket.emit('err', 'Need at least 2 players.'); return; }
     room.started = true;
+    clearTimeout(room.botTimer); room.botTimer = null;
     room.game = E.newGame(room.players.map(p => ({ id: p.id, name: p.name, bot: p.bot })));
     io.to(myRoom).emit('begin', {});
     runBots(room);
@@ -163,6 +259,7 @@ io.on('connection', (socket) => {
   socket.on('restart', () => {
     const room = rooms[myRoom]; if (!room) return;
     // rebuild a fresh game with the same seated players
+    clearTimeout(room.botTimer); room.botTimer = null;
     room.game = E.newGame(room.players.map(p => ({ id: p.id, name: p.name, bot: p.bot })));
     io.to(myRoom).emit('begin', {});
     runBots(room);
@@ -216,7 +313,7 @@ io.on('connection', (socket) => {
     const room = rooms[myRoom]; if (!room || !room.game || room.game.over) return;
     const g = room.game;
     if (!g.players[g.active].bot) { broadcast(room); return; }
-    advance(room, false);
+    advance(room);
   });
 
   socket.on('endTurn', () => {
@@ -228,16 +325,23 @@ io.on('connection', (socket) => {
   });
 
   socket.on('disconnect', () => {
-    const room = rooms[myRoom];
-    if (room && !room.started) {
-      room.players = room.players.filter(p => p.socket !== socket);
-      if (room.players.length === 0) delete rooms[myRoom];
-      else io.to(myRoom).emit('room', { code: myRoom, players: room.players.map(p => ({ id: p.id, name: p.name, bot: p.bot })) });
-    }
+    const room = rooms[myRoom]; if (!room) return;
+    const pl = room.players.find(p => p.socket === socket);
+    if (!pl) return;                      // this socket was already replaced by a reconnect
+    pl.socket = null; pl.connected = false;
+    if (room.started) { emitRoom(room); if (room.game) broadcast(room); return; }   // keep the seat; they can rejoin
+    // lobby: hold the seat briefly in case they're just reconnecting
+    emitRoom(room);
+    pl.graceTimer = setTimeout(() => {
+      if (pl.connected || room.started) return;
+      room.players = room.players.filter(p => p !== pl);
+      if (!room.players.some(p => !p.bot)) { delete rooms[room.code]; return; }
+      emitRoom(room);
+    }, LOBBY_GRACE_MS);
   });
 });
 
-const VERSION = '4.0.0';
+const VERSION = '4.0.1';
 app.get('/version', (req, res) => res.json({ version: VERSION }));
 
 const PORT = process.env.PORT || 3000;
