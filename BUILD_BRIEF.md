@@ -1,17 +1,18 @@
-# Rat's Kitchen — v4.1 build brief (online playtest build)
+# Rat's Kitchen — v4.2 build brief (online playtest build)
 
-Written 13 Nov 2026 for a fresh session. Designer: **Koko**. Read all of this
+Written 13 Nov 2026 for a fresh session; updated the same day for the
+streamlined v4.1.0 game. Designer: **Koko**. Read all of this
 before touching code.
 
 ## 0. The job
 
 Koko wants to play Rat's Kitchen online with friends to playtest it, and
-collect data on how people actually play. Starting from **v4.0.1** (in this
-repo), build **v4.1.0**:
+collect data on how people actually play. Starting from **v4.1.0** (in this
+repo, branch `main`), build **v4.2.0**:
 
 - **A. Play-data logging** with a **download button**. No survey.
 - **B. A rebuilt web client**, mobile-first, that friends can join from a link.
-- **C. Online-play fixes** — already done in v4.0.1 (section 6). Keep them
+- **C. Online-play fixes** — already done (section 6). Keep them
   working in the new client.
 
 **Do not change the game.** Rules, numbers, card text and bot policy are
@@ -21,12 +22,13 @@ silently.
 ## 1. Where things are
 
 - Repo: `github.com/antoniofranjesko-create/ratsKitchen-v3` (public, branch
-  `main`). Latest commit should be **v4.0.1** (or v4.0.0). If HEAD is still
-  v3.9.5, stop and tell Koko: he hasn't pushed v4 yet.
-- This session can almost certainly **read but not push**. Deliver one zip
-  (folder structure intact) plus exact git commands. Koko pushes from
-  `/mnt/c/Users/anton/Downloads/files8_v3` (WSL bash). Render auto-deploys on
-  push. Koko checks the corner `BUILD vX.Y.Z` tag and `/version` in an
+  `main`). Latest commit should be **v4.1.0**. If `/version` or `package.json`
+  says anything older, stop and tell Koko.
+- Try to push to a **side branch** first (the last session could). Never
+  push to `main` without Koko's approval: `main` is what Render deploys.
+  If pushing fails, deliver one zip (folder structure intact) plus exact git
+  commands. Render auto-deploy is **off**: Koko presses Manual Deploy, then
+  checks the corner `BUILD vX.Y.Z` tag and `/version` in an
   incognito tab before trusting a deploy.
 - Stack: Node + Express + Socket.io, plain JavaScript, **no build step**.
 
@@ -37,33 +39,38 @@ silently.
 | `server.js` | Rooms, lobby, per-viewer state projection (hands stay private), bot pacing |
 | `public/index.html` | Current client — one file, plain JS |
 | `sweep.js` | Balance sim (`node sweep.js`) |
-| `RATS_KITCHEN_RULES_v4.0.0.md` | Player-facing rules. Where it disagrees with the code, the code is right |
+| `RATS_KITCHEN_RULES_v4.1.0.md` | Player-facing rules. Where it disagrees with the code, the code is right |
 
-## 2. How v4.0.0 came to exist (context, not a task)
+## 2. The game as of v4.1.0 (context, not a task)
 
-v4.0.0 was built on 9 Sep but never pushed. It was regenerated on 13 Nov on
-top of the pushed v3.9.5 from that session's record. Its changes over v3.9.5:
+v4.1.0 is the streamlined game Koko approved on 13 Nov. Over v4.0.x:
 
-- **The Alley** — 3 rats face-up beside the bins (`g.alley`,
-  `refillAlley`, `takeFromAlley`). Special Delivery, Pelican, Breeder, the
-  Rat Release Market Day and Dodgy Inspector take from it.
-- **Dodgy Inspector** (card key `desperate`, 3 copies) — lose 1 star, take
-  any alley rat.
-- **Feeding** — Runner (draw 1), Sow (draw 2), Larder (eat it, +1 star),
-  Spice (clear a chilli) each cost 1 Food, once per turn per rat
-  (`p._fed`). Breeder is free once per turn.
-- **Rat set** — Street 9→4, ability rats 3 each; 47 rats, 15 per colour.
-- **Rat King at weight 7** (was 6). Stars 4.
+- **Fewer cards.** Cut: Switcheroo, Shakedown, Pelican Delivery, Recycle
+  Day, Rat Trap, Inheritance; and the Toll, Feral, Spice, Boiler, Grub and
+  Alpha rats. 20 card types and 9 rat types remain.
+- **Rat King at weight 6, crowned at the start of your own turn.** Reaching
+  6 mid-turn does not win; the table gets one round to respond
+  (`g._crown` in `startTurn` / `checkWin`).
+- **The Alley** — 3 rats face-up beside the bins. Special Delivery, Dodgy
+  Inspector, Breeder and the Rat Release Market Day take from it.
+- **Special Delivery** (6 copies) puts the alley rat in **any** kitchen. A
+  rival's kitchen counts as touched.
+- **Fixed setup at every player count:** 18 rats in the deck, 3 Health
+  Inspections. No per-player table.
+- **Feeding** — Runner (draw 1), Sow (draw 2), Larder (eat it, +1 star)
+  each cost 1 Food, once per turn per rat. Breeder is free once per turn.
+- Rats: Street 19, Fat 7, Runner 3, Sow 3, Larder 3, Breeder 2, Sewer 2,
+  Ratato 4, Hot Ratato 4. Stars 4, hand limit 7.
 
-Sim baseline for v4.0.0 (bots, not humans). Target band: attrition 30–60%,
-winner turns 12–16.
+Sim baseline (`node sweep.js`, bots, not humans). Target band: attrition
+30–60%, winner turns 12–16.
 
 | Players | Attrition | Winner turns | Rounds |
 |---|---|---|---|
-| 3 | 44% | 11 | 9.3 |
-| 4 | 42% | 13 | 10.5 |
-| 5 | 47% | 16 | 11.2 |
-| 6 | 59% | 19 | 12.5 |
+| 3 | 55% | 12 | 9.7 |
+| 4 | 49% | 13 | 10.0 |
+| 5 | 57% | 15 | 10.8 |
+| 6 | 62% | 18 | 11.8 |
 
 Run `node sweep.js` before you start and after each part. The numbers must
 stay the same within sim noise (a few points). If they move, you changed the
@@ -81,7 +88,7 @@ game.
 - **Kitchens are public, hands are private.** Never send or show another
   player's hand; counts only. Keep the per-viewer projection in `server.js`.
 - **UK English** in everything players see.
-- **Version:** bump to `4.1.0` in `server.js`, `package.json` and the client
+- **Version:** bump to `4.2.0` in `server.js`, `package.json` and the client
   corner tag.
 - Anything outside this brief: propose it to Koko first, don't build it.
 
@@ -126,6 +133,11 @@ between leader and second); who attacks whom; revenge attacks (A hits B,
 B hits A on B's next turn); every rat move, with the card that caused it and
 the rat type; which Market Day fired, with standings before and after.
 
+**Rat King holds:** every time a player ends a turn on 6+ weight — whether
+they were crowned next turn or knocked down, by whom and with which card.
+For Special Delivery, record whether the rat went to the player's own
+kitchen or a rival's, and which rat.
+
 **Confusion and connection:** every tap on an unplayable card and the
 reason shown (client sends a `uiEvent`); pickers opened then cancelled;
 disconnects and rejoins.
@@ -167,15 +179,17 @@ Every flow in the old client must exist in the new one. Show Koko the list.
 - **Lobby:** create or join a room by code, add bots, seat list, start.
   The share link (`?table=CODE`) fills in the code — keep it.
 - **Table:** your kitchen (rats with colour, weight, heat and ability
-  markers); rivals in a compact view (stars, weight out of 7, rats, hand
-  count, armed inspection, placed cards such as Territorial, Rat Trap,
-  Pelican, Inheritance, Hot Chilli); the alley; deck and bins counts; the
+  markers); rivals in a compact view (stars, weight out of 6, rats, hand
+  count, armed inspection, placed cards such as Territorial and Hot Chilli); the alley; deck and bins counts; the
   current Market Day; round and whose turn.
 - **Hand:** readable on a phone; tap to select; clear playable or unplayable
   state; tapping an unplayable card shows why.
-- **Every targeting flow:** pick a kitchen; pick a rat (theirs, yours, or
-  one of each for Switcheroo); pick an alley rat; pick a colour; Gambit
-  keep-one; Shakedown name-a-card; Recycle pick.
+- **Every targeting flow:** pick a kitchen; pick a rat (theirs or yours);
+  pick an alley rat; Special Delivery (alley rat, then **which kitchen**,
+  own or rival); pick a colour; Gambit keep-one.
+- **Rat King warning:** a player holding 6+ weight wins at the start of
+  their own turn. Show this loudly on their stall (the log already prints a
+  `⚠` line) so the table knows to stop them.
 - **Armed inspection:** a fire button and a loud "fire now — expires this
   turn" warning.
 - Rat info on tap, a readable log (keep the v3.9.3 formatting), an
@@ -192,7 +206,7 @@ Every flow in the old client must exist in the new one. Show Koko the list.
 - Touch targets at least 44px, no sideways scrolling, usable one-handed in
   portrait, also good in landscape and on desktop.
 
-## 6. Part C — online-play fixes (DONE in v4.0.1 — keep them working)
+## 6. Part C — online-play fixes (DONE — keep them working)
 
 Built and tested on 13 Nov with two real browsers plus a bot. The new client
 must support all of it:
@@ -231,21 +245,27 @@ must support all of it:
 
 ## 8. Known gaps — list them, don't fix them
 
-- Pelican lands on the first alley rat; the player doesn't choose
-  (`_pelicanPick` is never set).
-- Sim at 6 players: winner turns 19, above the 12–16 target.
+- Rat Release takes the heaviest alley rat automatically; the player
+  doesn't choose.
+- A 2-colour inspection fired by a human auto-picks the colour that hurts
+  most (`pickOneCol` isn't sent to the client), so the colour prompt never
+  shows.
+- Sim at 6 players: winner turns 18–20, above the 12–16 target; about a
+  quarter of games pass round 15.
+- Cut cards (Switcheroo, Shakedown, Pelican, Recycle, Rat Trap,
+  Inheritance) and cut rats still have code paths at count 0. Leave them.
 - Wok Block and Cat resolve automatically inside inspection and steal code;
   there's no reaction prompt.
 
 ## 9. Out of scope
 
-The streamlining ideas (heat = weight, cutting the immunity rats, merging
-rat-movers); the food/meld redesign; marinating and a 2-card limit; bringing
+Further rule changes of any kind; the food/meld redesign; elimination
+downtime at 5–6 players; marinating and a 2-card limit; bringing
 back Russian Roulette as a card; the Magawa game.
 
 ## 10. Deliver
 
-1. A zip of the full repo folder, v4.1.0.
+1. The build on a side branch (or a zip of the full repo folder), v4.2.0.
 2. `LOGGING.md` (schema) and `tools/analyse_logs.js`.
 3. Exact push commands:
    ```bash
@@ -253,7 +273,7 @@ back Russian Roulette as a card; the Magawa game.
    git status
    # copy the new files in, then:
    git add -A
-   git commit -m "v4.1.0: play-data logging, mobile client"
+   git commit -m "v4.2.0: play-data logging, mobile client"
    git push
    ```
 4. A short note: what changed, sweep before and after, the art filenames,
