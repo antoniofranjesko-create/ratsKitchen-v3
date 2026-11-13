@@ -6,7 +6,7 @@
 'use strict';
 
 const COLOURS = ['red', 'blue', 'green'];
-const THRESHOLD = 6;   // Rat King win at weight 6 (v4.1 streamlined set has fewer ways to gain rats)
+const THRESHOLD = 6;   // Rat King at weight 6 — awarded at the START of your own turn (see checkWin)
 const STARS = 4;
 const HAND = 7;
 
@@ -26,7 +26,7 @@ const RATS = {
   boiler: { name: 'Boiler Rat', w: 1, heat: 1, prop: 'no_steal',    col: true,  desc: 'Cannot be Poached.' },
   larder: { name: 'Larder Rat', w: 1, heat: 1, prop: 'feed_eat',    col: true,  desc: 'FEED 1 Food: eat this rat and regain 1 star. Once per turn.' },
   grub:   { name: 'Grub Rat',   w: 1, heat: 2, prop: null,          col: true,  desc: 'Cheap stock but runs hot — weight 1, heat 2. A liability when the inspector calls.' },
-  breeder:{ name: 'Breeder Rat',w: 1, heat: 1, prop: 'breed',       col: true,  desc: 'FREE, once per turn: take the top rat of the bins.' },
+  breeder:{ name: 'Breeder Rat',w: 1, heat: 1, prop: 'breed',       col: true,  desc: 'FREE, once per turn: take any rat from the alley.' },
   ratato: { name: 'Ratato Rat', w: 0, heat: 1, prop: null,        col: true,  desc: 'Weight 0, heat 1. Drawn straight into YOUR kitchen — worthless stock that still draws the inspector eye.' },
   hotrat: { name: 'Hot Ratato', w: 0, heat: 1, prop: 'sabotage',  col: true,  desc: 'Weight 0, heat 1. Held in hand, then thrown into a RIVAL kitchen — all heat, no value. Never your own.' },
 };
@@ -49,7 +49,7 @@ const CARDS = {
   food:        { name: 'Food',            cls: 'buff', desc: 'Spend 2 Food to regain 1 star. Powers builds that need feeding.' },
   cat:         { name: 'Cat',             cls: 'buff', desc: 'Play on one of your rats (not Fat or Alpha) to shield it — blocks the next single attack on that rat.' },
   lastresort:  { name: 'Last Resort',     cls: 'buff', desc: 'Eat any one of your rats and regain stars equal to its weight.' },
-  delivery:    { name: 'Special Delivery',cls: 'engine', desc: 'Take the top rat of the bins into your kitchen.' },
+  delivery:    { name: 'Special Delivery',cls: 'engine', desc: 'Take any rat from the alley and put it in ANY kitchen — yours, or a rival\'s.' },
   pelican:     { name: 'Pelican Delivery',cls: 'engine', desc: 'Place in YOUR kitchen. At the start of your next turn the pelican drops a rat from the alley into it — a delayed Special Delivery.' },
   recycle:     { name: 'Recycle Day',     cls: 'engine', desc: 'Take any one of the last 3 discarded action cards back into your hand.' },
   rattrap:     { name: 'Rat Trap',        cls: 'engine', desc: 'Place on a rival kitchen. The next rat to enter it is caught — and YOU take it into your kitchen. Springs once; expires at your next turn if nothing walks in.' },
@@ -58,7 +58,7 @@ const CARDS = {
   wd_snap:     { name: 'Snap Inspection',  cls: 'drawn', desc: 'WHEN DRAWN, reveal at once — it fires on YOU. Has one fixed colour: you lose 1 star per rat you hold of that colour. Hold none of it and the inspector walks past. Cannot be held or played.' },
   wd_snap2:    { name: 'Snap Inspection',  sub: 'Two Colour', cls: 'drawn', desc: 'WHEN DRAWN, reveal at once — it fires on YOU. Has two fixed colours: you lose 1 star per rat you hold of EITHER. Harder to dodge than the one-colour version. Cannot be held or played.' },
   wd_mole:     { name: 'Snap Inspection',  sub: 'Naked Mole Rat', cls: 'drawn', desc: 'WHEN DRAWN, reveal at once — it fires on YOU. The mole is blind to colour: a flat -1 star, no matter what you hold. Cannot be held or played.' },
-  desperate:   { name: 'Dodgy Inspector', cls: 'engine', desc: 'He docks your rating — lose 1 star — but he is on the take, and looks the other way while you take the top rat of the bins.' },
+  desperate:   { name: 'Dodgy Inspector', cls: 'engine', desc: 'He docks your rating — lose 1 star — but he is on the take, and looks the other way while you help yourself to any rat from the alley.' },
   gambit:      { name: 'Gambit',          cls: 'engine', desc: 'Look at the top 3 cards of the deck. Keep 1; put the other 2 back on top (you know what they are).' },
 };
 
@@ -84,7 +84,7 @@ function deckConfig(P) {
   //   mole      — the playable snap, the only count that scales with players
   const inspScale = Math.pow(P / 6, 0.5);
   const HI_MULT = 0.85;
-  const mole    = Math.max(2, Math.round(4 * inspScale * HI_MULT));
+  const mole    = 3;      // v4.1: fixed at every player count (was 2/3/4 scaled) — no setup table
   const sched1  = 6;
   const sched2  = 6;
   const wd_snap = 6;      // 2 per colour (was 3) — more draw-tension
@@ -105,7 +105,7 @@ function deckConfig(P) {
   // Sewer (2) is colourless and sits outside the colour split.
   // Ratato/Hot Ratato are counted separately (4 + 4).
   const ratMaster = {
-    plain: 16, fat: 10,
+    plain: 19, fat: 7,
     runner: 3, sow: 3, toll: 0, feral: 0, spice: 0,
     boiler: 0, larder: 3, grub: 0, breeder: 2,
     alpha: 0, sewer: 2,   // v4.1: Toll, Feral, Spice, Boiler, Grub, Alpha cut
@@ -120,7 +120,9 @@ function deckConfig(P) {
   const actionTotal = Object.values(actions).reduce((s, x) => s + x, 0);
   const TARGET_DENSITY = 0.19;
   const afterDeal = Math.max(20, actionTotal - HAND * P);
-  const deckRats = Math.max(6, Math.round(TARGET_DENSITY * afterDeal / (1 - TARGET_DENSITY)));
+  // v4.1: FIXED at every player count — one setup line, no table. The old
+  // density scaling left too few deck rats at 5-6P after the card cuts.
+  const deckRats = 18;
   const reshuffleRats = 7;        // rats reclaimed from bins at each reshuffle
   return { actions, ratMaster, deckRats, ratatoRats, hotratRats, reshuffleRats };
 }
@@ -130,7 +132,7 @@ function deckConfig(P) {
 // Curfew CUT to hit 6 — it's a pure social-layer no-op vs bots anyway.
 // Cheese Glut and Rat Boom remain parked from the prior pass.
 const MARKET_EVENTS = [
-  { event: 'rat_release',  name: 'Rat Release',       desc: 'The player holding the fewest rats takes the top rat of the bins. Tied? Fewest cards. Still tied? They each draw from the deck.' },
+  { event: 'rat_release',  name: 'Rat Release',       desc: 'The player holding the fewest rats takes 1 rat from the alley. Tied? Fewest cards. Still tied? They each draw from the deck.' },
   { event: 'frenzy',       name: 'Frenzy',            desc: 'Every player draws 1 card.' },
   { event: 'blackout',     name: 'Blackout',          desc: 'Every player discards 1 card.' },
   { event: 'pied_piper',   name: 'Pied Piper',        desc: 'Every player passes one of their own rats one seat to the left, simultaneously.' },
@@ -388,7 +390,7 @@ function ratEnters(g, p, rat) {
 function ratToBinsBottom(g, rat) { g.bins.unshift({ id: rat.id, rat }); }
 
 // Keep the Alley topped up to 3 face-up rats from the bins.
-const ALLEY_SIZE = 1;   // v4.1: no visible alley. g.alley now just holds the top rat of the bins (hidden).
+const ALLEY_SIZE = 3;
 function refillAlley(g) {
   while (g.alley.length < ALLEY_SIZE) {
     let idx = -1;
@@ -399,8 +401,11 @@ function refillAlley(g) {
 }
 // Take a specific rat out of the Alley by id (or the first if unspecified).
 function takeFromAlley(g, ratId) {
-  let i = ratId ? g.alley.findIndex(c => c.rat && c.rat.id === ratId) : 0;
-  if (i < 0) i = 0;
+  let i = ratId ? g.alley.findIndex(c => c.rat && c.rat.id === ratId) : -1;
+  if (i < 0) {   // no choice given: heaviest rat, then coolest
+    i = 0;
+    g.alley.forEach((c, k) => { const x = g.alley[i].rat; if (c.rat.w > x.w || (c.rat.w === x.w && c.rat.heat < x.heat)) i = k; });
+  }
   const c = g.alley.splice(i, 1)[0];
   refillAlley(g);
   return c || null;
@@ -470,7 +475,9 @@ function eliminate(g, t) {
 // Alpha is a defensive rat only — no win condition. While it's in a kitchen,
 // none of that kitchen's rats can be Poached (see ratEnters/poach handling).
 function checkWin(g, p) {
-  if (p.alive && winWeight(p, g.turn) >= THRESHOLD) {
+  // v4.1: Rat King is only crowned at the START of the holder's own turn
+  // (startTurn sets g._crown). Everyone gets one round to knock them down.
+  if (p.alive && g._crown === p.id && winWeight(p, g.turn) >= THRESHOLD) {
     g.over = true; g.winner = p.id;
     logAdd(g, `${p.name} becomes RAT KING with weight ${weight(p)}!`);
     return true;

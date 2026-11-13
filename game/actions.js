@@ -20,6 +20,10 @@ function startTurn(g) {
   const p = g.players[g.active];
   if (!p.alive) return;   // market effect eliminated the active player pre-turn
   p.turns++;
+  // v4.1: Rat King is crowned here — at the start of your own turn, if you
+  // still hold the weight after everyone has had a go at you.
+  g._crown = p.id; E.checkWin(g, p); g._crown = null;
+  if (g.over) return;
   // Turn header — the client styles lines starting with '▸' as a heading, so
   // the log reads as grouped turns rather than one undifferentiated stream.
   E.logAdd(g, `▸ Round ${g._round} · ${p.name}'s turn`);
@@ -153,7 +157,7 @@ function flipMarketDay(g) {
       if (pool.length === 1 && g.alley.length) {
         const cand = pool[0];
         const b = E.takeFromAlley(g, null);
-        if (E.ratEnters(g, cand, b.rat)) { E.logAdd(g, `Rat Release: ${cand.name} (fewest rats) takes a ${b.rat.name} from the bins.`); E.checkWin(g, cand); }
+        if (E.ratEnters(g, cand, b.rat)) { E.logAdd(g, `Rat Release: ${cand.name} (fewest rats) takes a ${b.rat.name} from the alley.`); E.checkWin(g, cand); }
       } else {
         // still tied (or no bin rat): each tied player draws from the deck
         E.logAdd(g, `Rat Release: tied on rats and cards — ${pool.map(q=>q.name).join(', ')} each draw from the deck.`);
@@ -299,12 +303,17 @@ function legalActions(g, p) {
     // ---- rat trap ----
     if (t === 'rattrap' && true)
       push({ id: c.id, type: t, needsTarget: true, targets: [...opps.map(o => o.id), p.id], label: 'Rat Trap' });
-    // ---- special delivery: top bins rat → you ----
-    if (t === 'delivery' && g.alley.length && canGainRat(p) && !p._playedRat)
-      push({ id: c.id, type: t, label: 'Special Delivery (top bins rat → you)' });
+    // ---- special delivery: take any alley rat → ANY kitchen (v4.1) ----
+    // Your own kitchen needs the usual one-rat-in-per-turn room; a rival's
+    // counts as touching that kitchen.
+    if (t === 'delivery' && g.alley.length) {
+      const tg = freeZones(opps).filter(o => o.territorial === 0).map(o => o.id);
+      if (canGainRat(p) && !p._playedRat) tg.unshift(p.id);
+      if (tg.length) push({ id: c.id, type: t, needsAlleyRat: true, needsTarget: true, targets: tg, label: 'Special Delivery (alley rat → any kitchen)' });
+    }
     // ---- dodgy inspector: lose a star, take any alley rat ----
     if (t === 'desperate' && p.stars >= 2 && g.alley.length && canGainRat(p) && !p._playedRat)
-      push({ id: c.id, type: t, label: 'Dodgy Inspector (-1 star → top bins rat)' });
+      push({ id: c.id, type: t, needsAlleyRat: true, label: 'Dodgy Inspector (-1 star → alley rat)' });
     // ---- pelican delivery: delayed Special Delivery on YOUR OWN kitchen ----
     if (t === 'pelican' && g.alley.length && !p._pelicanBy)
       push({ id: c.id, type: t, label: 'Pelican Delivery (alley rat arrives next turn)' });
@@ -354,11 +363,10 @@ function legalActions(g, p) {
     const hasLR = p.hand.find(c => c.card === 'lastresort');
     if (hasLR && p.rats.length) push({ id: hasLR.id, type: 'eat_lastresort', needsRat: true, label: 'Last Resort — eat a rat (+stars = weight)' });
   }
-  // Breeder Rat: FREE once per turn — take the top rat of the bins.
-  // (Tested at 1 Food in v4.1: Rat King wins fell to 22-36%, so it stays free.)
+  // Breeder Rat: FREE once per turn — take any rat from the Alley
   if (!p._bredThisTurn && p.rats.some(r => r.prop === 'breed')
       && g.alley.length && canGainRat(p) && !p._playedRat)
-    push({ type: 'breed', label: 'Breeder: top bins rat (free)' });
+    push({ type: 'breed', needsAlleyRat: true, label: 'Breeder: take an alley rat (free)' });
 
   // ── FEEDING ───────────────────────────────────────────────────────────────
   // Runner, Sow, Larder and Spice have a FED ability costing 1 Food, once per
@@ -514,17 +522,28 @@ function apply(g, p, act, targetId, ratId) {
     case 'boardup': { bin(takeCard(act.id)); p.boardup = 1; p._actedBuild = true; E.logAdd(g, `${p.name} boards up.`); break; }
     case 'rattrap': { bin(takeCard(act.id)); t._rattrap = p.id; p._actedBuild = true; E.logAdd(g, `${p.name} sets a Rat Trap on ${t.name}.`); break; }
     case 'delivery': {
+      // take ANY rat from the Alley (3 face-up) and put it in ANY legal kitchen
+      const dest = (t && act.targets && act.targets.includes(t.id)) ? t : null;
+      if (!dest) break;   // no legal kitchen chosen — card stays in hand
       bin(takeCard(act.id));
-      // take ANY rat from the Alley (3 face-up) — a real choice
-      const b = E.takeFromAlley(g, null);
-      if (b) { if (E.ratEnters(g, p, b.rat)) { p._ratsIn++; p._playedRat = true; } E.logAdd(g, `${p.name} takes the top bins rat — a ${b.rat.name}.`); }
-      p._actedBuild = true; break;
+      const b = E.takeFromAlley(g, ratId);
+      if (b && dest.id === p.id) {
+        if (E.ratEnters(g, p, b.rat)) { p._ratsIn++; p._playedRat = true; }
+        E.logAdd(g, `${p.name} takes a ${b.rat.name} from the alley.`);
+        p._actedBuild = true;
+      } else if (b) {
+        E.ratEnters(g, dest, b.rat);
+        if (!p._hitZones) p._hitZones = {}; p._hitZones[dest.id] = true;
+        E.logAdd(g, `${p.name} delivers a ${b.rat.name} from the alley to ${dest.name}'s kitchen.`);
+        p._actedAttack = true;
+      }
+      break;
     }
     case 'desperate': {
       bin(takeCard(act.id));
       E.damage(g, p, 1);
       if (!p.alive) break;
-      const lb = E.takeFromAlley(g, null);
+      const lb = E.takeFromAlley(g, ratId);
       if (lb && E.ratEnters(g, p, lb.rat)) {
         p._ratsIn++; p._playedRat = true;
         E.logAdd(g, `The Dodgy Inspector docks ${p.name} a star — and looks away while they take a ${lb.rat.name}.`);
@@ -597,10 +616,10 @@ function apply(g, p, act, targetId, ratId) {
     }
     case 'inherit': { bin(takeCard(act.id)); t._inheritBy = p.id; p._actedBuild = true; E.logAdd(g, `${p.name} places Inheritance on ${t.name}.`); break; }
     case 'breed': {
-      const b = E.takeFromAlley(g, null);
+      const b = E.takeFromAlley(g, ratId);
       if (b && E.ratEnters(g, p, b.rat)) {
         p._ratsIn++; p._playedRat = true;
-        E.logAdd(g, `${p.name}'s Breeder brings a ${b.rat.name} from the bins.`);
+        E.logAdd(g, `${p.name}'s Breeder takes a ${b.rat.name} from the alley.`);
       }
       p._bredThisTurn = true; p._actedBuild = true; break;
     }
@@ -637,6 +656,9 @@ function endTurn(g) {
   const p = g.players[g.active];
   while (p.hand.length > HAND) { const c = p.hand.shift(); if (c.rat) g.bins.unshift(c); else g.discard.push(c); }
   if (!g.players.some(x => x.alive)) { g.over = true; g.winner = null; return; }   // no one left (simultaneous KO)
+  // v4.1: warn the table about anyone holding Rat King weight
+  for (const q of g.players) if (q.alive && E.weight(q) >= E.THRESHOLD)
+    E.logAdd(g, `⚠ ${q.name} holds ${E.weight(q)} weight — Rat King at the start of their turn unless someone stops them!`);
   do { g.active = (g.active + 1) % g.players.length; } while (!g.players[g.active].alive);
   g.turn++;
 }
@@ -652,6 +674,7 @@ function botTurn(g) {
     let target = null, ratId = null;
     if (choice.needsTarget) target = botTarget(g, p, choice);
     if (choice.needsAlleyRat) ratId = botAlleyPick(g);
+    if (choice.type === 'delivery') { const d = botDelivery(g, p, choice); target = d.target; ratId = d.ratId; }
     if (choice.needsRat) {
       // for Exterminator the rat comes from the TARGET kitchen; otherwise from own rats
       if (choice.type === 'exterm') {
@@ -704,6 +727,9 @@ function botChoose(g, p, acts) {
   const iLead = !lead || E.weight(p) >= E.weight(lead);
   const threat = threatTo(g, p);
   const has = (type) => acts.find(a => a.type === type && !a.disabled);
+  // Special Delivery is only worth playing if we can keep the rat, or there is a
+  // weight-0 rat to dump on a rival.
+  const okDeliv = () => { const a = has('delivery'); return a && (a.targets.includes(p.id) || g.alley.some(c => c.rat.w === 0)) ? a : null; };
 
   // 1. fire armed inspection if it hits someone dangerous
   if (has('fire')) return has('fire');
@@ -728,14 +754,14 @@ function botChoose(g, p, acts) {
   }
   // 4. race if safe and close
   if (gap <= 2 && threat === 0) {
-    if (has('delivery')) return has('delivery');
+    if (okDeliv()) return okDeliv();
     if (has('breed')) return has('breed');
     if (has('feed')) return has('feed');
     if (has('desperate') && threat === 0 && p.stars >= 3 && E.weight(p) < E.THRESHOLD - 1) return has('desperate');
     if (has('poach')) return has('poach');
   }
   // 5. productive plays first — grow your own kitchen
-  if (has('delivery')) return has('delivery');
+  if (okDeliv()) return okDeliv();
   if (has('breed')) return has('breed');
   if (has('feed')) return has('feed');
   if (has('desperate') && threat === 0 && p.stars >= 3 && E.weight(p) < E.THRESHOLD - 1) return has('desperate');
@@ -764,6 +790,25 @@ function botChoose(g, p, acts) {
   return has('end');
 }
 
+// Special Delivery (v4.1): keep the best rat, or dump a weight-0 rat on the
+// leader when it matches an inspection we hold and nothing heavy is on offer.
+function botDelivery(g, p, act) {
+  const self = act.targets.includes(p.id);
+  const rivals = act.targets.filter(id => id !== p.id).map(id => g.players.find(x => x.id === id));
+  const junk = g.alley.filter(c => c.rat.w === 0);
+  const bestW = Math.max(...g.alley.map(c => c.rat.w));
+  const myCols = [];
+  if (p.armed) myCols.push(...(p.armed.cols || []));
+  p.hand.forEach(c => { if (c.card === 'sched1' || c.card === 'sched2') myCols.push(...(c.cols || [])); });
+  const match = junk.find(c => myCols.includes(c.rat.col));
+  const give = (match && bestW <= 1) ? match : ((bestW === 0 || !self) ? junk[0] : null);
+  if (give && rivals.length) {
+    const tgt = rivals.sort((x, y) => E.weight(y) - E.weight(x))[0];
+    return { target: tgt.id, ratId: give.rat.id };
+  }
+  if (self) return { target: p.id, ratId: botAlleyPick(g) };
+  return { target: null, ratId: null };   // botChoose (okDeliv) never gets here
+}
 function botAlleyPick(g) {
   const best = g.alley.slice().sort((a, b) => (b.rat.w - a.rat.w) || (a.rat.heat - b.rat.heat))[0];
   return best ? best.rat.id : null;

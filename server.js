@@ -48,9 +48,11 @@ function project(g, viewerId, room) {
       return active && active.bot;
     })(),
     stepMode: !!(room && room.stepMode),
-    binsRats: g.bins.filter(b => b.rat).length + (g.alley||[]).length,
+    binsRats: g.bins.filter(b => b.rat).length,
     // THE ALLEY — 3 face-up rats
-    alley: [],   // v4.1: no visible alley — the top bins rat stays hidden
+    alley: (g.alley||[]).map(c => ({ id:c.rat.id, kind:c.rat.kind, name:c.rat.name,
+      w:c.rat.w, heat:c.rat.heat, col:c.rat.col, prop:c.rat.prop,
+      desc:(E.RATS[c.rat.kind]&&E.RATS[c.rat.kind].desc)||'' })),
     deckLeft: g.deck.length,
     // Market Day: the event flipped for the current round (null before any flip).
     market: g.market ? { event: g.market.event, name: g.market.name, desc: g.market.desc } : null,
@@ -95,6 +97,7 @@ function project(g, viewerId, room) {
       return A.legalActions(g, p).map(a => ({
         type: a.type, id: a.id, label: a.label,
         needsTarget: !!a.needsTarget, needsRat: !!a.needsRat, needsColour: a.needsColour || 0,
+        needsAlleyRat: !!a.needsAlleyRat,   // v4.1 fix: was never sent, so players could not choose an alley rat
         targets: a.targets || [],
       }));
     })(),

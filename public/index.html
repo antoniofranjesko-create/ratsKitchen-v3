@@ -342,7 +342,7 @@ button:disabled{opacity:.35;cursor:not-allowed}
   <div class="lobby-card">
     <div class="tag">Unlicensed · after dark</div>
     <h2>Run the night market</h2>
-    <div class="lobby-sub">Farm the vermin. Dodge the inspector. First to rat-king weight rules the alley.</div>
+    <div class="lobby-sub">Farm the vermin. Dodge the inspector. Hold rat-king weight for a full round and you rule the alley.</div>
     <div id="joinForms">
       <div class="field"><label for="name">Your name</label><input id="name" placeholder="e.g. Sly" maxlength="16"/></div>
       <div class="row"><button id="btnCreate">Open a table</button></div>
@@ -390,6 +390,7 @@ button:disabled{opacity:.35;cursor:not-allowed}
             <div class="pile turnpile"><span class="pilen" id="turnN">0</span><span class="pilek">turn</span></div>
           </div>
         </div>
+        <div class="panel"><div class="panel-h">The alley</div><div class="alleyrow" id="alleyRow"></div></div>
         <div class="panel"><div class="panel-h">Kitchen log</div><div class="log" id="log"></div></div>
       </div>
     </div>
@@ -693,7 +694,7 @@ function ratHTML(r){
   const marks=[];
   if(r.shielded) marks.push('<span class="ratmark cat" title="Shielded by a Cat">🐱</span>');
   if(r.chilli) marks.push('<span class="ratmark hot" title="Hot Chilli — explodes next turn">🌶️</span>');
-  if(r.prop==='breed') marks.push('<span class="ratmark act" title="Breeder — free once a turn: top bins rat">⚙️</span>');
+  if(r.prop==='breed') marks.push('<span class="ratmark act" title="Breeder — free once a turn: take any alley rat">⚙️</span>');
   if(r.prop==='feed_draw')  marks.push('<span class="ratmark act" title="Runner — feed 1 Food: draw 1, once a turn">🍖</span>');
   if(r.prop==='feed_draw2') marks.push('<span class="ratmark act" title="Sow — feed 1 Food: draw 2, once a turn">🍖</span>');
   if(r.prop==='feed_eat')   marks.push('<span class="ratmark act" title="Larder — feed 1 Food: eat it for 1 star, once a turn">🍖</span>');
@@ -774,8 +775,8 @@ function playVerb(a,card){
   const map={mole:'Inspect (snap, -1 star)',sched1:'Arm inspection',sched2:'Arm 2-colour inspection',
     poach:'Poach a rat',ratato:'Dump a rat',hotratato:'Ratata Quente — dump a rat',switch:'Swap a rat',chilli:'Explode a rat',
     territorial:'Mark territorial',grease:'Grease their inspector',boardup:'Board up',cat:'Shield a rat',wok:'Ready a Wok block',
-    rattrap:'Set a rat trap',pelican:'Send the pelican',delivery:'Take top bins rat',recycle:'Recycle a discard',
-    exterm:'Exterminate a rat',inherit:'Place Inheritance',desperate:'Dodgy Inspector (-1 star)',feed:'Feed the rat (1 Food)',breed:'Breeder: top bins rat',gambit:'Look at top 3',klepto:'Lift a card',shakedown:'Shake down for a card',
+    rattrap:'Set a rat trap',pelican:'Send the pelican',delivery:'Deliver an alley rat',recycle:'Recycle a discard',
+    exterm:'Exterminate a rat',inherit:'Place Inheritance',desperate:'Dodgy Inspector (-1 star)',feed:'Feed the rat (1 Food)',breed:'Breeder: take alley rat',gambit:'Look at top 3',klepto:'Lift a card',shakedown:'Shake down for a card',
     lastresort:'Eat a rat for stars',food_heal:'Spend 2 Food (+star)',breed:'Breeder: 2 Food → rat',misc:'Do the odd job'};
   return map[a.type]||a.label;
 }
@@ -920,9 +921,18 @@ async function pickFireColour(a, targetId){
 async function alleyPick(a){
   const al=STATE.alley||[];
   if(!al.length){ render(); return; }
-  const pick=await modalPick('Take which rat from the alley?', ratOpts(al));
-  if(pick) socket.emit('act',{type:a.type,id:a.id,ratId:pick});
-  else render();
+  const pick=await modalPick(a.type==='delivery'?'Deliver which rat from the alley?':'Take which rat from the alley?', ratOpts(al));
+  if(!pick){ render(); return; }
+  // Special Delivery: the rat can go into ANY kitchen
+  if(a.type==='delivery'){
+    const opts=(a.targets||[]).map(id=>{ const k=STATE.players.find(x=>x.id===id);
+      return {label:id===YOU?'🏠 Your kitchen':'➡️ '+esc(k?k.name:id)+"'s kitchen", value:id}; });
+    const to=opts.length===1?opts[0].value:await modalPick('Deliver it to which kitchen?', opts);
+    if(to) socket.emit('act',{type:a.type,id:a.id,ratId:pick,target:to});
+    else render();
+    return;
+  }
+  socket.emit('act',{type:a.type,id:a.id,ratId:pick});
 }
 function ratOpts(rats){
   return rats.map(r=>{
