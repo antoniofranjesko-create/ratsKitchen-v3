@@ -207,17 +207,13 @@ io.on('connection', (socket) => {
     attach(room, mine);
   });
 
-  // Hand a seat whose player has dropped out to a bot, so the game can go on.
-  socket.on('botify', ({ playerId }) => {
-    const room = rooms[myRoom]; if (!room) return;
-    const me = room.players.find(p => p.id === myId);
-    if (!me || me.bot || !me.connected) return;
-    const pl = room.players.find(p => p.id === playerId);
-    if (!pl || pl.bot || pl.connected) return;        // only seats that have gone offline
-    pl.bot = true; pl.token = null; pl.socket = null;
+  // Turn a human seat into a bot seat so the game can go on without them.
+  function seatToBot(room, pl) {
+    clearTimeout(pl.graceTimer); pl.graceTimer = null;
+    pl.bot = true; pl.token = null; pl.socket = null; pl.connected = false;
     const g = room.game;
     if (!g) { emitRoom(room); return; }
-    const gp = g.players.find(p => p.id === playerId);
+    const gp = g.players.find(p => p.id === pl.id);
     if (gp) gp.bot = true;
     E.logAdd(g, `${pl.name} has left — a bot takes over their stall.`);
     emitRoom(room);
@@ -228,6 +224,41 @@ io.on('connection', (socket) => {
     } else {
       broadcast(room);
     }
+  }
+
+  // Hand a seat whose player has dropped out to a bot, so the game can go on.
+  socket.on('botify', ({ playerId }) => {
+    const room = rooms[myRoom]; if (!room) return;
+    const me = room.players.find(p => p.id === myId);
+    if (!me || me.bot || !me.connected) return;
+    const pl = room.players.find(p => p.id === playerId);
+    if (!pl || pl.bot || pl.connected) return;        // only seats that have gone offline
+    seatToBot(room, pl);
+  });
+
+  // Quit the table for good: the seat is given up, so this browser is free to
+  // open or join another table. In the lobby the seat is removed; mid-game a bot
+  // takes it over. A table with no human seats left is closed.
+  socket.on('leave', () => {
+    const room = rooms[myRoom];
+    const pl = room && room.players.find(p => p.id === myId);
+    if (room) socket.leave(room.code);
+    myRoom = null; myId = null;
+    socket.emit('left', {});
+    if (!pl) return;
+    clearTimeout(pl.graceTimer); pl.graceTimer = null;
+    pl.socket = null; pl.connected = false; pl.token = null;
+    if (!room.players.some(p => p !== pl && !p.bot)) {
+      clearTimeout(room.botTimer); room.botTimer = null;
+      delete rooms[room.code];
+      return;
+    }
+    if (!room.started) {
+      room.players = room.players.filter(p => p !== pl);
+      emitRoom(room);
+      return;
+    }
+    seatToBot(room, pl);
   });
 
   socket.on('setStep', ({ on }) => {
@@ -342,7 +373,7 @@ io.on('connection', (socket) => {
   });
 });
 
-const VERSION = '4.1.1';
+const VERSION = '4.1.2';
 app.get('/version', (req, res) => res.json({ version: VERSION }));
 
 const PORT = process.env.PORT || 3000;

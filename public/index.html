@@ -38,6 +38,8 @@ h1,h2,h3,.bebas{font-family:'Bebas Neue',sans-serif;font-weight:400;letter-spaci
 .meta{display:flex;gap:16px;align-items:center;font-family:'Barlow Condensed';font-size:13px;
   letter-spacing:1px;color:var(--bone-dim);text-transform:uppercase}
 .build{font-size:10px;color:var(--ash);letter-spacing:2px}
+.leavebtn{padding:4px 10px;font-size:12px;letter-spacing:1px;line-height:1.2}
+.leavebtn.sure{border-color:var(--red,#c0392b);color:var(--red,#e0604f)}
 .wrap{max-width:1160px;margin:0 auto;padding:20px 16px 60px}
 .lobby-card{max-width:520px;margin:8vh auto 0;background:var(--stall);border:1px solid var(--line);
   border-radius:6px;padding:28px;box-shadow:0 30px 80px -30px #000, inset 0 1px 0 rgba(255,255,255,.03)}
@@ -473,7 +475,7 @@ button:disabled{opacity:.35;cursor:not-allowed}
 <body>
 <div class="topbar">
   <div class="brand">RAT'S <b>KITCHEN</b></div>
-  <div class="meta"><span class="build">BUILD v4.1.1</span></div>
+  <div class="meta"><button id="btnLeave" class="ghost leavebtn hidden">Leave table</button><span class="build">BUILD v4.1.2</span></div>
 </div>
 
 <div id="lobby" class="wrap">
@@ -575,10 +577,31 @@ $('btnJoin').onclick=()=>socket.emit('join',{code:$('code').value.trim().toUpper
 $('btnBot').onclick=()=>socket.emit('addBot');
 $('btnStart').onclick=()=>socket.emit('start');
 $('playAgainBtn').onclick=()=>{ $('winner').classList.add('hidden'); socket.emit('restart'); };
-$('exitBtn').onclick=()=>{ store.del('rk_room'); location.href=location.pathname; };
+// Quit the table: give the seat up on the server, forget the table in this
+// browser, and go back to the menu so a new table can be opened or joined.
+let _leaving=false;
+function leaveTable(){
+  if(_leaving) return; _leaving=true;
+  store.del('rk_room');
+  const go=()=>{ location.href=location.pathname; };
+  socket.once('left',go);
+  socket.emit('leave');
+  setTimeout(go,1200);            // offline or slow server: go anyway
+}
+$('exitBtn').onclick=leaveTable;
+let _leaveArm=null;
+$('btnLeave').onclick=()=>{
+  const b=$('btnLeave');
+  const midGame=STATE&&!STATE.over&&!$('game').classList.contains('hidden');
+  if(!midGame||b.classList.contains('sure')){ clearTimeout(_leaveArm); leaveTable(); return; }
+  b.classList.add('sure'); b.textContent='Tap again to quit';   // second tap confirms mid-game
+  _leaveArm=setTimeout(()=>{ b.classList.remove('sure'); b.textContent='Leave table'; },3000);
+};
 
 socket.on('room',r=>{
+  if(_leaving) return;
   if(r.you) YOU=r.you;
+  $('btnLeave').classList.remove('hidden');
   $('joinForms').classList.add('hidden');
   $('roomBox').classList.remove('hidden');
   if(r.code){ $('roomCode').textContent=r.code; store.set('rk_room',r.code);
@@ -587,7 +610,7 @@ socket.on('room',r=>{
     `<div class="lobby-seat"><span class="dot"></span>${esc(p.name)}${p.bot?'<span class="bt">BOT</span>':(p.id===YOU?'<span class="bt">YOU</span>':'')}${(!p.bot&&p.connected===false)?'<span class="bt">OFFLINE</span>':''}</div>`).join('');
 });
 socket.on('err',m=>{$('errBox').textContent=m;setTimeout(()=>$('errBox').textContent='',3500)});
-socket.on('begin',()=>{$('lobby').classList.add('hidden');$('game').classList.remove('hidden')});
+socket.on('begin',()=>{if(_leaving)return;$('lobby').classList.add('hidden');$('game').classList.remove('hidden')});
 socket.on('state',s=>{STATE=s;render()});
 function esc(x){return String(x).replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]))}
 
