@@ -447,6 +447,26 @@ button:disabled{opacity:.35;cursor:not-allowed}
   .stalls{grid-template-columns:repeat(auto-fill,minmax(260px,1fr))}
   .log{max-height:180px}
 }
+/* v4.1.1: phone landscape — table on the left, your kitchen and hand in a column on the right */
+@media (orientation:landscape) and (max-height:500px){
+  .dock{position:fixed;top:29px;right:0;bottom:0;width:300px;margin:0;overflow-y:auto;
+    border-top:none;border-left:1px solid var(--line);padding:6px 8px;z-index:30}
+  #game .wrap,.market-banner,.picker-bar{margin-right:300px}
+  #game .wrap{padding-bottom:8px}
+  .stalls,.stalls.many{grid-template-columns:1fr 1fr}
+  .stalls{align-items:start;padding:5px;gap:5px}
+  .stall .counter,.stall .pips{grid-column:1/-1}
+  .stall .pips{flex-direction:row;max-width:none;margin-top:3px}
+  .stall .pip.hand{position:absolute;top:26px;right:8px;border:none;padding:0}
+  .stall .counter{margin-top:4px;padding-right:56px}
+  .stall-name{max-width:84px}
+  .stall-name .bot{display:none}
+  .king{width:60px}
+  .hand{flex-wrap:wrap;overflow-x:visible}
+  .pcard{flex:0 0 calc(25% - 3px);max-width:none;height:70px}
+  .mybar{flex-wrap:wrap}
+  .log{max-height:110px}
+}
 @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
 </style>
 </head>
