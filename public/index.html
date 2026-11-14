@@ -324,6 +324,124 @@ button:disabled{opacity:.35;cursor:not-allowed}
 ::-webkit-scrollbar{height:8px;width:8px}
 ::-webkit-scrollbar-thumb{background:var(--line-lit);border-radius:8px}
 ::-webkit-scrollbar-track{background:transparent}
+/* ---- v4.1.1: "my kitchen" bar, always visible above the hand ---- */
+.mybar{display:flex;align-items:center;gap:10px;padding:6px 8px;margin-bottom:8px;
+  background:var(--stall);border:1px solid var(--line);border-left:3px solid var(--lamp);border-radius:6px}
+.mybar.active{border-color:var(--lamp);box-shadow:0 0 18px -6px var(--lamp-glow)}
+.mybar.target{cursor:pointer;border-color:var(--danger);box-shadow:0 0 0 1px var(--danger)}
+.mybar.crown{border-color:var(--danger);animation:firepulse 1.4s infinite}
+.mb-stats{display:flex;flex-direction:column;gap:3px;flex:0 0 auto}
+.mb-nums{display:flex;gap:10px;font-family:'Barlow Condensed';font-size:11px;letter-spacing:1px;
+  text-transform:uppercase;color:var(--bone-dim);white-space:nowrap}
+.mb-nums b{font-family:'Bebas Neue';font-size:17px;font-weight:400;line-height:1;margin-right:2px}
+.mb-nums .w b{color:var(--lamp)} .mb-nums .h b{color:var(--danger)}
+.mb-rats{display:flex;gap:5px;overflow-x:auto;flex:1;min-width:0;align-items:center;padding:2px 0}
+.mb-none{font-family:'Barlow Condensed';font-size:11px;letter-spacing:2px;text-transform:uppercase;color:var(--ash)}
+.mb-extra{display:flex;flex-direction:column;gap:3px;flex:0 1 auto;align-items:flex-end}
+.pip.crownpip{color:#fff;background:var(--danger);border-color:var(--danger)}
+.mybar .rat{width:32px;height:42px;border-radius:4px}
+.mybar .rat .band{height:4px}
+.mybar .rat .art{height:22px;font-size:16px}
+.mybar .rat .nm{display:none}
+.mybar .rat .corners span{font-size:12px}
+
+/* ---- v4.1.1: compact layout for phones — the whole table on one screen ---- */
+@media (max-width:700px), (max-height:500px){
+  .topbar{padding:3px 10px}
+  .brand{font-size:17px}
+  .picker-bar{top:28px;padding:6px 10px}
+  .market-banner{margin:4px 8px 0;padding:4px 9px;font-size:12px;line-height:1.25;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+  .market-banner .mb-title{display:inline;font-size:10px;margin:0 6px 0 0}
+  #game .wrap{padding:6px 8px 0}
+  .table{grid-template-columns:auto minmax(0,1fr);gap:6px}
+  .rail{display:contents}
+  .panel-h{display:none}
+  /* deck / bins / turn + the alley share one strip at the top */
+  #pilesPanel{order:-2;display:flex;align-items:center}
+  .piles{padding:4px 10px;gap:12px}
+  .pilecard{display:none}
+  .pilen{font-size:17px}
+  #alleyPanel{order:-1;display:flex;align-items:center;gap:6px;padding-left:8px}
+  #alleyPanel::before{content:'Alley';font-family:'Barlow Condensed';font-size:10px;letter-spacing:2px;
+    text-transform:uppercase;color:var(--lamp-dim)}
+  .alleyrow{padding:4px;gap:5px;flex-wrap:nowrap}
+  .alleyrow .empty{padding:6px 0}
+  .stalls{grid-column:1/-1;grid-template-columns:1fr;gap:6px;padding:6px;border-radius:8px}
+  .stalls.many{grid-template-columns:1fr 1fr}
+  #stalls .stall.you{display:none}          /* your kitchen lives in the bar above your hand */
+  .stall{padding:6px 8px 6px;display:grid;grid-template-columns:minmax(0,1fr) auto;column-gap:8px;align-items:center}
+  .stall::before{height:3px}
+  .stall-head{margin:0;gap:5px;min-width:0}
+  .stall-name{font-size:16px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:110px}
+  .turn-flag{font-size:0;gap:0}
+  .stats{margin:0;gap:8px;flex-wrap:nowrap;justify-content:flex-end}
+  .stats .stat .k{display:none}
+  .bulb{width:10px;height:10px}
+  .king{min-width:0;width:84px;flex:0 0 auto}
+  .king .k{margin-bottom:1px}
+  .king .k span{display:none}
+  .king .k b{font-size:11px}
+  .meter{height:6px}
+  .stat .v{font-size:16px;color:var(--danger);white-space:nowrap}
+  .stall.dead .counter,.stall.dead .pips,.stall.dead .kcards{display:none}
+  .stall.dead::after{font-size:15px;letter-spacing:3px;transform:none;justify-content:flex-end;padding-right:12px}
+  .stat .v::after{content:'🔥';font-size:9px;margin-left:1px}
+  .stalls.many .stall{grid-template-columns:1fr}
+  .stalls.many .stats{justify-content:flex-start;margin-top:3px}
+  .kcards{grid-column:1/-1}
+  .pips{flex-direction:column;align-items:flex-end;max-width:112px;text-align:right}
+  .stalls.many .counter,.stalls.many .pips{grid-column:1/-1}
+  .stalls.many .pips{flex-direction:row;max-width:none}
+  .stalls.many .pip.hand{position:absolute;top:7px;right:8px}
+  .stalls.many .stall-name .bot{display:none}
+  .stalls.many .stall-name{max-width:90px}
+  .counter{padding:4px;gap:4px;min-height:0;margin-top:5px}
+  .counter.empty{min-height:18px}
+  .counter.empty::after{font-size:9px}
+  .pips{margin-top:4px;min-height:0;gap:4px}
+  .pip{font-size:9px;padding:1px 6px}
+  .kcards{margin-top:4px}
+  .kcard{padding:2px 6px}
+  .rat,.alleyrow .rat{width:32px;height:42px;border-radius:4px}
+  .rat .band{height:4px}
+  .rat .art{height:22px;font-size:16px}
+  .rat .nm{display:none}
+  .rat .corners span{font-size:12px}
+  .ratmarks{top:4px;right:1px} .ratmark{font-size:9px}
+  /* what was just played, bots toggle and the log sit below the table */
+  #nowPanel{grid-column:1/-1;order:1}
+  .nowplaying{padding:4px 8px;min-height:0}
+  .np-mini{display:none}
+  .np-txt{font-size:12px}
+  .stepwrap{padding:0 6px 6px}
+  #logPanel{grid-column:1/-1;order:2}
+  .log{max-height:150px;padding:6px 8px;font-size:10px}
+  /* dock: prompt, my kitchen, hand, actions */
+  .dock{margin-top:6px;padding:5px 8px 8px;background:var(--alley)}
+  .dock-h{margin-bottom:4px}
+  .dock-h .lbl{display:none}
+  .dock-h .prompt{font-size:12px;line-height:1.25;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+  .fireWarn{font-size:11px;padding:2px 6px}
+  .mybar{padding:4px 6px;margin-bottom:5px;gap:8px}
+  .mb-nums{gap:8px;font-size:9px}
+  .mb-nums b{font-size:16px}
+  .hand{gap:4px;padding:2px 0 4px}
+  .pcard{flex:1 1 0;width:auto;min-width:46px;max-width:92px;min-height:0;height:76px;border-radius:5px}
+  .pcard:hover,.hand .pcard:hover{transform:none}
+  .pcard.sel{transform:translateY(-3px)}
+  .pcard .top{height:6px;font-size:0;padding:0}
+  .pcard .cname{font-size:11px;letter-spacing:0;padding:3px 3px 0;hyphens:auto;-webkit-hyphens:auto;overflow-wrap:anywhere;line-height:1}
+  .pcard .csub{font-size:8px;padding:0 3px;letter-spacing:0;white-space:nowrap;overflow:hidden}
+  .pcard .art{height:22px;font-size:17px;position:absolute;left:0;right:0;bottom:6px}
+  .pcard .cdesc{display:none}
+  .pcard .inspband{position:absolute;left:3px;right:3px;bottom:2px;margin:0;height:4px}
+  .actions{margin-top:5px;gap:6px}
+  .actions button{min-height:44px;font-size:13px;padding:6px 12px;flex:1 1 auto}
+  .actions .hint,.actions .info .lng{display:none}
+  .actions .info{flex:0 0 44px;padding:6px 0;font-size:18px}
+  .actions .end{flex:0 1 auto}
+  .winner h2{font-size:44px}
+}
 @media (max-height:560px){
   .dock{position:static;background:var(--alley)}
   .stalls{grid-template-columns:repeat(auto-fill,minmax(260px,1fr))}
@@ -335,7 +453,7 @@ button:disabled{opacity:.35;cursor:not-allowed}
 <body>
 <div class="topbar">
   <div class="brand">RAT'S <b>KITCHEN</b></div>
-  <div class="meta"><span class="build">BUILD v4.1.0</span></div>
+  <div class="meta"><span class="build">BUILD v4.1.1</span></div>
 </div>
 
 <div id="lobby" class="wrap">
@@ -381,7 +499,7 @@ button:disabled{opacity:.35;cursor:not-allowed}
           <div class="stepwrap"><button id="btnStepMode" class="ghost stepmode">Bots: auto</button>
           </div>
         </div>
-        <div class="panel"><div class="panel-h">The bins &amp; deck</div>
+        <div class="panel" id="pilesPanel"><div class="panel-h">The bins &amp; deck</div>
           <div class="piles">
             <div class="pile deckpile"><div class="pilecard deckback"></div>
               <span class="pilen" id="deckN">0</span><span class="pilek">deck</span></div>
@@ -390,13 +508,14 @@ button:disabled{opacity:.35;cursor:not-allowed}
             <div class="pile turnpile"><span class="pilen" id="turnN">0</span><span class="pilek">turn</span></div>
           </div>
         </div>
-        <div class="panel"><div class="panel-h">The alley</div><div class="alleyrow" id="alleyRow"></div></div>
-        <div class="panel"><div class="panel-h">Kitchen log</div><div class="log" id="log"></div></div>
+        <div class="panel" id="alleyPanel"><div class="panel-h">The alley</div><div class="alleyrow" id="alleyRow"></div></div>
+        <div class="panel" id="logPanel"><div class="panel-h">Kitchen log</div><div class="log" id="log"></div></div>
       </div>
     </div>
   </div>
   <div class="dock">
     <div class="dock-h"><span class="lbl">Your hand</span><span class="prompt" id="dockPrompt"></span></div>
+    <div class="mybar" id="myBar"></div>
     <div class="hand" id="hand"></div>
     <div class="actions" id="actions"></div>
   </div>
@@ -482,8 +601,10 @@ function render(){
   renderNowPlaying();
   const meActive = STATE.active===YOU && !STATE.over;
   $('stalls').innerHTML=STATE.players.map(p=>stallHTML(p)).join('');
+  $('stalls').classList.toggle('many', STATE.players.filter(p=>p.id!==YOU).length>=5);
+  renderMyBar();
   // tap a rat to see its role/description
-  $('stalls').querySelectorAll('.ratclick').forEach(el=>{
+  document.querySelectorAll('#stalls .ratclick, #myBar .ratclick, #alleyRow .ratclick').forEach(el=>{
     el.onclick=(e)=>{
       // during a target pick, let the click fall through to the stall (don't intercept)
       if(picking) return;
@@ -495,8 +616,7 @@ function render(){
     $('pickerBar').classList.remove('hidden');
     $('pickerMsg').textContent=picking.msg;
     picking.targets.forEach(tid=>{
-      const el=document.querySelector('.stall[data-id="'+tid+'"]');
-      if(el){el.classList.add('target');el.onclick=async()=>{
+      document.querySelectorAll('.stall[data-id="'+tid+'"], .mybar[data-id="'+tid+'"]').forEach(el=>{el.classList.add('target');el.onclick=async()=>{
         const a=picking.act; const then=picking.then; picking=null; $('pickerBar').classList.add('hidden');
         if(then==='colour'){
           const target=STATE.players.find(x=>x.id===tid);
@@ -518,7 +638,7 @@ function render(){
         } else {
           send(a,tid,null);
         }
-      };}
+      };});
     });
   }else $('pickerBar').classList.add('hidden');
   const me=STATE.players.find(p=>p.id===YOU);
@@ -538,7 +658,7 @@ function render(){
     }
     return `<div class="pcard ${cls} ${selectedCardId===c.id?'sel':''}" data-cid="${c.id}" data-ci="${i}">
       <div class="top">${CARD_TYPE[cls]}</div>
-      <div class="cname">${esc(c.name)}</div>
+      <div class="cname">${softName(c.name)}</div>
       ${sub}
       <div class="art">${CARD_ART[c.card]||'🎴'}</div>
       ${band}
@@ -568,6 +688,9 @@ function render(){
   } else {
     $('dockPrompt').textContent = STATE.over ? '' : (meActive ? 'Your turn — play a card or act' : waitingMsg());
   }
+  // a selected card explains itself (phone cards are too small for rules text)
+  const selC = selectedCardId && meP && (meP.hand||[]).find(c=>c.id===selectedCardId);
+  if(selC && !fireReady) $('dockPrompt').innerHTML = `<b>${esc(selC.name)}</b> — ${esc(selC.desc||'')}`;
   renderActions(meActive);
   $('log').innerHTML=STATE.log.map(l=>formatLog(l)).join('');
   $('log').scrollTop=$('log').scrollHeight;
@@ -669,6 +792,7 @@ function stallHTML(p){
     }
     pips.push(`<span class="pip armed ${p.armed.ready?'ready':''}">⚑ ${own?'YOUR inspector':'inspector'} ${p.armed.ready?'ready to fire':'arming'} · ${capTxt}${colTxt}</span>`);
   }
+  if(p.alive && p.weight>=STATE.threshold) pips.unshift(`<span class="pip crownpip">⚠ Rat King next turn — stop them!</span>`);
   pips.push(`<span class="pip hand">${p.handCount} cards</span>`);
   const turnflag=(p.id===STATE.active&&!STATE.over)?'<span class="turn-flag"><span class="pulse"></span>to act</span>':'';
   return `<div class="${cls.join(' ')}" data-id="${p.id}">
@@ -683,6 +807,29 @@ function stallHTML(p){
     ${kitchenRow}
     <div class="pips">${pips.join('')}</div>
   </div>`;
+}
+// Your own kitchen, always on screen above your hand
+function renderMyBar(){
+  const bar=$('myBar'); if(!bar) return;
+  const p=STATE.players.find(x=>x.id===YOU);
+  if(!p){ bar.className='mybar hidden'; return; }
+  const crown=p.alive && p.weight>=STATE.threshold;
+  bar.className='mybar'+((p.id===STATE.active&&!STATE.over)?' active':'')+(crown?' crown':'');
+  bar.dataset.id=p.id; bar.onclick=null;
+  if(!p.alive){ bar.innerHTML='<span class="mb-none">Your stall is shut down — you are watching</span>'; return; }
+  const maxStars=STATE.maxStars||4;
+  const bulbs=Array.from({length:maxStars},(_,i)=>`<span class="bulb ${i<p.stars?'':'out'}"></span>`).join('');
+  const extra=[];
+  if(crown) extra.push('<span class="pip crownpip">Hold on — you win next turn</span>');
+  if(p.armed){
+    const cols=(p.armed.cols||[]).map(c=>({red:'🔴',blue:'🔵',green:'🟢'}[c]||c)).join('');
+    extra.push(`<span class="pip armed ${p.armed.ready?'ready':''}">⚑ ${p.armed.ready?'fire now':'arming'} ${cols}</span>`);
+  }
+  (p.kitchenCards||[]).forEach(kc=>extra.push(`<span class="pip terr" title="placed by ${esc(kc.by)}">${esc(kc.name)}</span>`));
+  bar.innerHTML=`<div class="mb-stats"><span class="stars">${bulbs}</span>
+      <span class="mb-nums"><span class="w"><b>${p.weight}</b>/ ${STATE.threshold} weight</span><span class="h"><b>${p.heat}</b>heat</span></span></div>
+    <div class="mb-rats">${p.rats.length?p.rats.map(ratHTML).join(''):'<span class="mb-none">no rats yet</span>'}</div>
+    ${extra.length?`<div class="mb-extra">${extra.join('')}</div>`:''}`;
 }
 function colDot(c){const m={red:'🔴',blue:'🔵',green:'🟢',yellow:'🟡'};return m[c]||'⚪'}
 function ratHTML(r){
@@ -745,7 +892,7 @@ function renderActions(meActive){
     const card=me&&me.hand&&me.hand.find(c=>c.id===selectedCardId);
     const cardActs=acts.filter(a=>a.id===selectedCardId);
     if(card){
-      html+=`<button class="info" data-info="1">ⓘ ${esc(card.name)} — details</button>`;
+      html+=`<button class="info" data-info="1">ⓘ<span class="lng"> ${esc(card.name)} — details</span></button>`;
       if(cardActs.length){
         html+=cardActs.map((a,i)=>`<button data-ci="${i}">${esc(playVerb(a,card))}</button>`).join('');
       }else{
@@ -760,7 +907,7 @@ function renderActions(meActive){
     }
   }
   // no card selected: show free actions + a hint
-  html+=`<span style="font-family:'Barlow Condensed';letter-spacing:1px;color:var(--bone-dim);align-self:center;padding:0 6px">tap a card to play it${free.length?', or:':''}</span>`;
+  html+=`<span class="hint" style="font-family:'Barlow Condensed';letter-spacing:1px;color:var(--bone-dim);align-self:center;padding:0 6px">tap a card to play it${free.length?', or:':''}</span>`;
   html+=free.map((a,i)=>{
     // disabled entries are explanatory hints (why you can't fire), not buttons
     if(a.disabled) return `<span style="font-family:'Barlow Condensed';letter-spacing:1px;color:var(--ash);align-self:center;padding:0 8px">${esc(a.label)}</span>`;
@@ -821,6 +968,8 @@ function inspBand(c){
   }
   return '';
 }
+// soft hyphens so long card names break cleanly on narrow phone cards
+function softName(n){return esc(n).replace('Territorial','Territ&shy;orial').replace('Kleptomaniac','Klepto&shy;maniac').replace('Exterminator','Extermi&shy;nator').replace('Inspection','Inspec&shy;tion').replace('Inspector','Inspec&shy;tor').replace('Delivery','Deliv&shy;ery');}
 function shortDesc(d){
   if(!d) return '';
   // first sentence, capped
