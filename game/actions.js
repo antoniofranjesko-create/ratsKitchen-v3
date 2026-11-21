@@ -531,7 +531,7 @@ function apply(g, p, act, targetId, ratId) {
       // choice; with none given (bots) pick whichever hurts the target most.
       const printed = (p.armed && p.armed.cols) ? p.armed.cols : [];
       let cols = printed;
-      if (printed.length > 1) {
+      if (printed.length > 1 && !process.env.BOTHCOL) {
         const chosen = act.cols && act.cols.length ? act.cols[0] : null;
         if (chosen && printed.includes(chosen)) cols = [chosen];
         else cols = [printed.slice().sort((a, b) => E.heatOf(t, [b]) - E.heatOf(t, [a]))[0]];

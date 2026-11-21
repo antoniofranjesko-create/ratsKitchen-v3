@@ -5,7 +5,7 @@
 
 'use strict';
 
-const COLOURS = ['red', 'blue', 'green'];
+const COLOURS = ['red', 'blue', 'green', 'yellow', 'purple'].slice(0, +(process.env.NTYPES || 3));
 const THRESHOLD = +(process.env.THRESH || 6);   // Rat King at weight 6 — awarded at the START of your own turn (see checkWin)
 const STARS = +(process.env.STARS || 4);
 const HAND = 7;
