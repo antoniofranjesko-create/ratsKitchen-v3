@@ -7,7 +7,7 @@
 
 const COLOURS = ['red', 'blue', 'green'];
 const THRESHOLD = +(process.env.THRESH || 6);   // Rat King at weight 6 — awarded at the START of your own turn (see checkWin)
-const STARS = 4;
+const STARS = +(process.env.STARS || 4);
 const HAND = 7;
 
 
@@ -130,8 +130,9 @@ function deckConfig(P) {
     // V5 TEST: all rats live in the rat deck (the bins). Market deck = everything else.
     actions.desperate = 0;
     actions.feast = +(process.env.FEAST ?? 4);
-    Object.assign(ratMaster, { plain: +(process.env.STREET ?? 4), fat: +(process.env.FATN ?? 6), runner: 3, sow: 3, toll: 3, feral: 3, spice: 3,
-      boiler: 3, larder: 3, grub: 3, breeder: 2, alpha: 1, sewer: 2, hog: +(process.env.HOG ?? 3) });
+    if (process.env.NOFOODCARDS) { actions.food = 0; actions.feast = 0; }
+    Object.assign(ratMaster, { plain: +(process.env.STREET ?? 4), fat: +(process.env.FATN ?? 6), runner: 3, sow: 3, toll: 3, feral: +(process.env.IMM ?? 3), spice: +(process.env.IMM ?? 3),
+      boiler: +(process.env.IMM ?? 3), larder: 3, grub: 3, breeder: 2, alpha: 1, sewer: 2, hog: +(process.env.HOG ?? 3) });
     return { actions, ratMaster, deckRats: 0, ratatoRats, hotratRats, reshuffleRats: 0 };
   }
   return { actions, ratMaster, deckRats, ratatoRats, hotratRats, reshuffleRats };
@@ -154,6 +155,10 @@ function buildMarketDeck() { return MARKET_EVENTS.map(e => ({ id: rid(), ...e })
 function rid() { return Math.random().toString(36).slice(2, 9); }
 
 function makeRat(kind, colour) {
+  if (process.env.V5 && kind === 'alpha') { const r = makeRat0(kind, colour); r.prop = 'alpha_feed'; return r; }
+  return makeRat0(kind, colour);
+}
+function makeRat0(kind, colour) {
   const d = RATS[kind];
   return {
     id: rid(), kind, name: d.name, w: d.w, heat: d.heat,
@@ -242,7 +247,7 @@ function newGame(playerDefs) {
 
   const players = playerDefs.map((d, i) => ({
     id: d.id, name: d.name, bot: !!d.bot, seat: i,
-    stars: STARS, rats: [], hand: [],
+    stars: STARS, rats: [], hand: [], food: 0,
     armed: null,            // {cols:[], age:0} — one at a time
     boardup: 0, territorial: 0, _pelicanBy: null,
     alive: true, turns: 0,
@@ -322,7 +327,7 @@ function newGame(playerDefs) {
   // aside and reshuffled back so they only ever fire when drawn in play).
   const setAside = [];
   for (const p of players) {
-    p.hand.push({ id: rid(), card: 'food' });
+    if (process.env.NOFOODCARDS) p.food = 1; else p.hand.push({ id: rid(), card: 'food' });
     let dealt = 0;
     while (dealt < HAND - 1) {
       const c = drawCard(g);

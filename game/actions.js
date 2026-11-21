@@ -37,6 +37,7 @@ function startTurn(g) {
   p._bredThisTurn = false;
   p._fed = {};             // rats fed this turn (once per rat per turn)
   p._v5 = { total: 0, att: false, def: false, drew: false };
+  p._alphaGuard = false;
   if (process.env.V5) { const S = global.__v5 = global.__v5 || { rat: 0, card: 0, att: 0, def: 0, turns: 0 }; S.turns++; }
 
   // 1) resolve YOUR lingering cards placed last turn (card-as-token): Hot Chilli detonates now
@@ -78,6 +79,12 @@ function startTurn(g) {
   // 3) draw phase — Runner chains; Ratato and other rats obey the entry rules
   g.justDrew = [];   // what the active player drew this turn (for UI visibility)
   let draws = 1;
+  // FOOD INCOME test levers. A: +1 Food token every turn. B: take 1 Food OR draw.
+  if (process.env.FOODINC === 'A') p.food = (p.food || 0) + 1;
+  if (process.env.FOODINC === 'B') {
+    const ft = (p.food || 0) + p.hand.reduce((s, c) => s + E.foodVal(c), 0);
+    if (ft < HEALCOST && p.hand.length >= 3) { p.food = (p.food || 0) + 1; draws = 0; }
+  }
   for (let i = 0; i < draws && i < 8; i++) {
     const c = E.drawCard(g);
     if (!c) break;
@@ -238,11 +245,15 @@ function flipMarketDay(g) {
 
 // ── legality ────────────────────────────────────────────────────────────────
 function canGainRat(p) { return process.env.V5 ? true : p._ratsIn < 1; }
-const foodTotal = p => p.hand.reduce((s, c) => s + E.foodVal(c), 0);
+const foodTotal = p => (p.food || 0) + p.hand.reduce((s, c) => s + E.foodVal(c), 0);
+const HEALCOST = +(process.env.HEALCOST || 2);
+const COSTLY = process.env.CARDCOST ? { exterm: 1, delivery: 1, poach: 1 } : {};
 // pay n Food; prefer exact single Food cards, then Feast
 function payFood(g, p, n) {
   if (foodTotal(p) < n) return false;
   let left = n;
+  const tok = Math.min(p.food || 0, left); p.food = (p.food || 0) - tok; left -= tok;
+  if (left <= 0) return true;
   const ord = p.hand.filter(c => E.foodVal(c)).sort((a, b) => n >= 2 ? E.foodVal(b) - E.foodVal(a) : E.foodVal(a) - E.foodVal(b));
   for (const c of ord) { if (left <= 0) break; p.hand.splice(p.hand.indexOf(c), 1); g.discard.push(c); left -= E.foodVal(c); }
   return true;
@@ -294,7 +305,7 @@ function legalActions(g, p) {
       push({ id: c.id, type: t, label: `Arm ${E.CARDS[t].sub}` });
     // ---- poach: weight-1 rat, not Boiler, not in an Alpha-guarded kitchen ----
     if (t === 'poach' && true && canGainRat(p)) {
-      const vics = freeZones(opps).filter(o => !o.rats.some(r => r.prop === 'alpha_guard') && o.rats.some(r => r.prop !== 'no_steal' && r.prop !== 'alpha_guard' && r.w <= 1));
+      const vics = freeZones(opps).filter(o => !o._alphaGuard && !o.rats.some(r => r.prop === 'alpha_guard') && o.rats.some(r => r.prop !== 'no_steal' && r.prop !== 'alpha_guard' && r.w <= 1));
       if (vics.length) push({ id: c.id, type: t, needsTarget: true, needsRat: 'target', targets: vics.map(o => o.id), label: 'Poach a rat' });
     }
     // ---- switcheroo ----
@@ -389,8 +400,10 @@ function legalActions(g, p) {
                              label: `Fire Inspection (${colsLabel})` });
   }
   // 2 Food -> 1 star
-  if (!capped && foodTotal(p) >= 2 && p.stars < E.STARS)
-    push({ type: 'food_heal', label: 'Spend 2 Food (+1 star)' });
+  if (!capped && foodTotal(p) >= HEALCOST && p.stars < E.STARS)
+    push({ type: 'food_heal', label: `Spend ${HEALCOST} Food (+1 star)` });
+  // card food costs (test lever)
+  for (let i = acts.length - 1; i >= 0; i--) if (COSTLY[acts[i].type] && foodTotal(p) < COSTLY[acts[i].type]) acts.splice(i, 1);
   // Last Resort still eats any rat for stars = weight
   if (!capped) {
     const hasLR = p.hand.find(c => c.card === 'lastresort');
@@ -415,6 +428,8 @@ function legalActions(g, p) {
         push({ type: 'feed', ratId: r.id, feed: 'draw2', label: 'Feed the Sow (1 Food → draw 2)' });
       if (r.prop === 'feed_eat' && p.stars < E.STARS)
         push({ type: 'feed', ratId: r.id, feed: 'eat',   label: 'Feed the Larder (1 Food → eat it, +1 star)' });
+      if (r.prop === 'alpha_feed' && !p._alphaGuard)
+        push({ type: 'feed', ratId: r.id, feed: 'alpha', label: 'Feed the Alpha (1 Food → no poaching until your next turn)' });
       if (r.prop === 'feed_grow' && r.w < 3)
         push({ type: 'feed', ratId: r.id, feed: 'grow', label: 'Feed the Hog (1 Food → +1 weight)' });
       if (r.prop === 'no_explode' && p.rats.some(x => x._chilliBy))
@@ -455,6 +470,7 @@ function apply(g, p, act, targetId, ratId) {
     if (act.type === 'v5card') { S.card++; const c = E.drawCard(g); if (c) resolveDraw(g, p, c, true); return; }
     if (c5 !== 'free') S[c5]++;
   }
+  if (COSTLY[act.type] && !payFood(g, p, COSTLY[act.type])) return;
   const FREE = { fire: 1, end: 1, sow_draw: 1 };
   if (!FREE[act.type]) p._plays = (p._plays || 0) + 1;
   // record what was just played so the UI can show it physically (central slot)
@@ -486,7 +502,8 @@ function apply(g, p, act, targetId, ratId) {
   switch (act.type) {
     case 'food_boost': { bin(takeCard(act.id)); p._actedBuild = true; E.logAdd(g, `${p.name} plays Food.`); break; }
     case 'food_heal': {
-      if (!payFood(g, p, 2)) break;
+      if (!payFood(g, p, HEALCOST)) break;
+      if (global.__v5) global.__v5.heal = (global.__v5.heal || 0) + 1;
       p.stars = Math.min(E.STARS, p.stars + 1); p._actedBuild = true;
       E.logAdd(g, `${p.name} spends 2 Food for a star.`); break;
     }
@@ -520,7 +537,13 @@ function apply(g, p, act, targetId, ratId) {
         else cols = [printed.slice().sort((a, b) => E.heatOf(t, [b]) - E.heatOf(t, [a]))[0]];
       }
       p.armed = null;
+      // test lever: bribe the inspector — pay 1 Food for +1 damage on a hit
+      const pre = t ? t.stars : 0, hitHeat = t ? E.heatOf(t, cols) : 0;
       E.fireScheduled(g, p, t, cols);
+      if (process.env.FIREBOOST && t && t.alive && t.stars < pre && hitHeat > 0 && payFood(g, p, 1)) {
+        E.damage(g, t, 1); E.logAdd(g, `${p.name} slips the heron some food — +1 damage.`);
+        if (global.__v5) global.__v5.boost = (global.__v5.boost || 0) + 1;
+      }
       if (t && t.id !== p.id) { if(!p._hitZones) p._hitZones={}; p._hitZones[t.id] = true; }
       break;
     }
@@ -684,6 +707,7 @@ function apply(g, p, act, targetId, ratId) {
     case 'feed': {
       // pay 1 Food
       if (!payFood(g, p, 1)) break;
+      if (global.__v5) global.__v5.feed = (global.__v5.feed || 0) + 1;
       const fr = p.rats.find(x => x.id === (act.ratId || ratId));
       if (!fr) break;
       p._fed = p._fed || {}; p._fed[fr.id] = true;
@@ -696,6 +720,8 @@ function apply(g, p, act, targetId, ratId) {
         g.bins.unshift({ id: fr.id, rat: fr });
         p.stars = Math.min(E.STARS, p.stars + 1);
         E.logAdd(g, `${p.name} feeds the ${fr.name}, then eats it — back to ${p.stars} stars.`);
+      } else if (act.feed === 'alpha') {
+        p._alphaGuard = true;
       } else if (act.feed === 'grow') {
         fr.w = Math.min(3, fr.w + 1);
         E.logAdd(g, `${p.name} feeds the Hog Rat — it grows to weight ${fr.w}.`);
