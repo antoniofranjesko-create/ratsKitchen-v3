@@ -129,6 +129,7 @@ function deckConfig(P) {
   if (process.env.V5) {
     // V5 TEST: all rats live in the rat deck (the bins). Market deck = everything else.
     actions.desperate = 0;
+    actions.inherit = +(process.env.INHN ?? 0);
     actions.feast = +(process.env.FEAST ?? 4);
     if (process.env.NOFOODCARDS) { actions.food = 0; actions.feast = 0; }
     Object.assign(ratMaster, { plain: +(process.env.STREET ?? 4), fat: +(process.env.FATN ?? 6), runner: 3, sow: 3, toll: 3, feral: +(process.env.IMM ?? 3), spice: +(process.env.IMM ?? 3),
@@ -481,7 +482,14 @@ function eliminate(g, t) {
   // player takes 2 of their cards at random when they fall.
   if (t._inheritBy) {
     const q = g.players.find(x => x.id === t._inheritBy);
-    if (q && q.alive) {
+    if (q && q.alive && process.env.INHERIT === 'rats') {
+      // test variant: loot the stall's stock — the inheritor takes its 2 heaviest rats
+      const loot = t.rats.slice().sort((a, b) => b.w - a.w).slice(0, 2);
+      for (const r of loot) { t.rats = t.rats.filter(x => x.id !== r.id); q.rats.push(r); }
+      if (global.__v5) global.__v5.inh = (global.__v5.inh || 0) + 1;
+      logAdd(g, `${q.name}'s Inheritance pays off — they loot ${loot.length} rats from ${t.name}'s stall.`);
+    } else if (q && q.alive) {
+      if (global.__v5) global.__v5.inh = (global.__v5.inh || 0) + 1;
       for (let k = 0; k < 2 && t.hand.length; k++) {
         const i = Math.floor(Math.random() * t.hand.length);
         q.hand.push(t.hand.splice(i, 1)[0]);

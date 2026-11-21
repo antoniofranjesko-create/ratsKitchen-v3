@@ -975,6 +975,7 @@ function botTarget(g, p, act) {
   }
   if (act.type === 'play_ratato' || act.type === 'territorial' || act.type === 'chilli')
     return cands.sort((a, b) => E.weight(b) - E.weight(a))[0].id; // hurt the leader
+  if (act.type === 'inherit') return cands.sort((a, b) => a.stars - b.stars)[0].id;   // the weakest stall
   if (act.type === 'rattrap') return cands.sort((a, b) => E.weight(b) - E.weight(a))[0].id;
   // steal/inspect: prefer close-to-win, then biggest hoard
   return cands.sort((a, b) => (E.weight(b) - E.weight(a)))[0].id;
