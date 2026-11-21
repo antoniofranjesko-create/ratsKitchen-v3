@@ -6,7 +6,7 @@
 'use strict';
 
 const COLOURS = ['red', 'blue', 'green'];
-const THRESHOLD = 6;   // Rat King at weight 6 — awarded at the START of your own turn (see checkWin)
+const THRESHOLD = +(process.env.THRESH || 6);   // Rat King at weight 6 — awarded at the START of your own turn (see checkWin)
 const STARS = 4;
 const HAND = 7;
 
@@ -26,6 +26,7 @@ const RATS = {
   boiler: { name: 'Boiler Rat', w: 1, heat: 1, prop: 'no_steal',    col: true,  desc: 'Cannot be Poached.' },
   larder: { name: 'Larder Rat', w: 1, heat: 1, prop: 'feed_eat',    col: true,  desc: 'FEED 1 Food: eat this rat and regain 1 star. Once per turn.' },
   grub:   { name: 'Grub Rat',   w: 1, heat: 2, prop: null,          col: true,  desc: 'Cheap stock but runs hot — weight 1, heat 2. A liability when the inspector calls.' },
+  hog:    { name: 'Hog Rat',    w: 1, heat: 1, prop: 'feed_grow',   col: true,  desc: 'FEED 1 Food: tuck it under — +1 weight (max 3). The food stays with the rat.' },
   breeder:{ name: 'Breeder Rat',w: 1, heat: 1, prop: 'breed',       col: true,  desc: 'FREE, once per turn: take any rat from the alley.' },
   ratato: { name: 'Ratato Rat', w: 0, heat: 1, prop: null,        col: true,  desc: 'Weight 0, heat 1. Drawn straight into YOUR kitchen — worthless stock that still draws the inspector eye.' },
   hotrat: { name: 'Hot Ratato', w: 0, heat: 1, prop: 'sabotage',  col: true,  desc: 'Weight 0, heat 1. Held in hand, then thrown into a RIVAL kitchen — all heat, no value. Never your own.' },
@@ -59,6 +60,7 @@ const CARDS = {
   wd_snap2:    { name: 'Snap Inspection',  sub: 'Two Colour', cls: 'drawn', desc: 'WHEN DRAWN, reveal at once — it fires on YOU. Has two fixed colours: you lose 1 star per rat you hold of EITHER. Harder to dodge than the one-colour version. Cannot be held or played.' },
   wd_mole:     { name: 'Snap Inspection',  sub: 'Naked Mole Rat', cls: 'drawn', desc: 'WHEN DRAWN, reveal at once — it fires on YOU. The mole is blind to colour: a flat -1 star, no matter what you hold. Cannot be held or played.' },
   desperate:   { name: 'Dodgy Inspector', cls: 'engine', desc: 'He docks your rating — lose 1 star — but he is on the take, and looks the other way while you help yourself to any rat from the alley.' },
+  feast:       { name: 'Feast',           cls: 'buff', desc: 'Counts as 2 Food.' },
   gambit:      { name: 'Gambit',          cls: 'engine', desc: 'Look at the top 3 cards of the deck. Keep 1; put the other 2 back on top (you know what they are).' },
 };
 
@@ -124,6 +126,14 @@ function deckConfig(P) {
   // density scaling left too few deck rats at 5-6P after the card cuts.
   const deckRats = 18;
   const reshuffleRats = 7;        // rats reclaimed from bins at each reshuffle
+  if (process.env.V5) {
+    // V5 TEST: all rats live in the rat deck (the bins). Market deck = everything else.
+    actions.desperate = 0;
+    actions.feast = +(process.env.FEAST ?? 4);
+    Object.assign(ratMaster, { plain: +(process.env.STREET ?? 4), fat: +(process.env.FATN ?? 6), runner: 3, sow: 3, toll: 3, feral: 3, spice: 3,
+      boiler: 3, larder: 3, grub: 3, breeder: 2, alpha: 1, sewer: 2, hog: +(process.env.HOG ?? 3) });
+    return { actions, ratMaster, deckRats: 0, ratatoRats, hotratRats, reshuffleRats: 0 };
+  }
   return { actions, ratMaster, deckRats, ratatoRats, hotratRats, reshuffleRats };
 }
 
@@ -277,7 +287,8 @@ function newGame(playerDefs) {
   // the rest split deck/bins by the density-scaled count.
   const special = allRats.filter(r => r.kind === 'ratato' || r.kind === 'hotrat');
   const normal  = allRats.filter(r => r.kind !== 'ratato' && r.kind !== 'hotrat');
-  for (const r of special) deck.push({ id: r.id, rat: r });
+  for (const r of special) if (!process.env.V5 || r.kind === 'hotrat') deck.push({ id: r.id, rat: r });
+  if (process.env.V5) normal.push(...special.filter(r => r.kind === 'ratato'));
   for (const r of normal.slice(0, cfg.deckRats)) deck.push({ id: r.id, rat: r });
   shuffle(deck);
 
@@ -316,7 +327,8 @@ function newGame(playerDefs) {
     while (dealt < HAND - 1) {
       const c = drawCard(g);
       if (!c) break;
-      if (c.rat) { g.bins.push(c); }
+      if (c.rat && process.env.V5) { setAside.push(c); }
+      else if (c.rat) { g.bins.push(c); }
       else if (c.card === 'wd_snap' || c.card === 'wd_snap2' || c.card === 'wd_mole') { setAside.push(c); }
       else { p.hand.push(c); dealt++; }
     }
@@ -390,13 +402,16 @@ function ratEnters(g, p, rat) {
 function ratToBinsBottom(g, rat) { g.bins.unshift({ id: rat.id, rat }); }
 
 // Keep the Alley topped up to 3 face-up rats from the bins.
-const ALLEY_SIZE = 3;
+const ALLEY_SIZE = process.env.V5 ? 1 : 3;
 function refillAlley(g) {
   while (g.alley.length < ALLEY_SIZE) {
     let idx = -1;
-    for (let i = g.bins.length - 1; i >= 0; i--) { if (g.bins[i].rat) { idx = i; break; } }
+    if (process.env.V5) { if (g.bins.length) idx = Math.floor(Math.random() * g.bins.length); }   // V5: face-down rat deck; returned rats are shuffled back in
+    else for (let i = g.bins.length - 1; i >= 0; i--) { if (g.bins[i].rat) { idx = i; break; } }
     if (idx < 0) break;                       // bins exhausted
-    g.alley.push(g.bins.splice(idx, 1)[0]);
+    const got = g.bins.splice(idx, 1)[0];
+    if (got.rat && got.rat.kind === 'hog') got.rat.w = 1;   // fed food is discarded when a Hog leaves play
+    g.alley.push(got);
   }
 }
 // Take a specific rat out of the Alley by id (or the first if unspecified).
@@ -498,6 +513,7 @@ function checkWin(g, p) {
 }
 
 module.exports = {
+  foodVal: c => c.card === 'food' ? 1 : c.card === 'feast' ? 2 : 0,
   COLOURS, THRESHOLD, STARS, HAND, RATS, CARDS,
   newGame, drawCard, weight, winWeight, heat, heatOf, hasCol, opponents,
   refillAlley, takeFromAlley, ALLEY_SIZE,
