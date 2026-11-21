@@ -129,7 +129,7 @@ function deckConfig(P) {
   if (process.env.V5) {
     // V5 TEST: all rats live in the rat deck (the bins). Market deck = everything else.
     actions.desperate = 0;
-    actions.inherit = +(process.env.INHN ?? 0);
+    actions.inherit = +(process.env.INHN ?? 3);   // Inheritance back x3 (take 2 cards) — locked 21 Nov
     actions.feast = +(process.env.FEAST ?? 4);
     if (process.env.NOFOODCARDS) { actions.food = 0; actions.feast = 0; }
     Object.assign(ratMaster, { plain: +(process.env.STREET ?? 4), fat: +(process.env.FATN ?? 6), runner: 3, sow: 3, toll: 3, feral: +(process.env.IMM ?? 3), spice: +(process.env.IMM ?? 3),
