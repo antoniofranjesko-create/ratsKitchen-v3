@@ -400,7 +400,7 @@ function legalActions(g, p) {
                              label: `Fire Inspection (${colsLabel})` });
   }
   // 2 Food -> 1 star
-  if (!capped && foodTotal(p) >= HEALCOST && p.stars < E.STARS)
+  if (!capped && foodTotal(p) >= HEALCOST && p.stars < (p.maxStars || E.STARS))
     push({ type: 'food_heal', label: `Spend ${HEALCOST} Food (+1 star)` });
   // card food costs (test lever)
   for (let i = acts.length - 1; i >= 0; i--) if (COSTLY[acts[i].type] && foodTotal(p) < COSTLY[acts[i].type]) acts.splice(i, 1);
@@ -426,7 +426,7 @@ function legalActions(g, p) {
         push({ type: 'feed', ratId: r.id, feed: 'draw',  label: 'Feed the Runner (1 Food → draw 1)' });
       if (r.prop === 'feed_draw2')
         push({ type: 'feed', ratId: r.id, feed: 'draw2', label: 'Feed the Sow (1 Food → draw 2)' });
-      if (r.prop === 'feed_eat' && p.stars < E.STARS)
+      if (r.prop === 'feed_eat' && p.stars < (p.maxStars || E.STARS))
         push({ type: 'feed', ratId: r.id, feed: 'eat',   label: 'Feed the Larder (1 Food → eat it, +1 star)' });
       if (r.prop === 'alpha_feed' && !p._alphaGuard)
         push({ type: 'feed', ratId: r.id, feed: 'alpha', label: 'Feed the Alpha (1 Food → no poaching until your next turn)' });
@@ -504,14 +504,14 @@ function apply(g, p, act, targetId, ratId) {
     case 'food_heal': {
       if (!payFood(g, p, HEALCOST)) break;
       if (global.__v5) global.__v5.heal = (global.__v5.heal || 0) + 1;
-      p.stars = Math.min(E.STARS, p.stars + 1); p._actedBuild = true;
+      p.stars = Math.min((p.maxStars || E.STARS), p.stars + 1); p._actedBuild = true;
       E.logAdd(g, `${p.name} spends 2 Food for a star.`); break;
     }
     case 'eat_lastresort': {
       const r = p.rats.find(x => x.id === ratId); if (!r) break;
       bin(takeCard(act.id));   // spend the Last Resort card
       p.rats = p.rats.filter(x => x.id !== r.id); g.bins.push({ id: r.id, rat: r });
-      p.stars = Math.min(E.STARS, p.stars + r.w); p._actedBuild = true;
+      p.stars = Math.min((p.maxStars || E.STARS), p.stars + r.w); p._actedBuild = true;
       E.logAdd(g, `${p.name} plays Last Resort and eats a ${r.name} for ${r.w} star(s).`); break;
     }
     case 'mole': { bin(takeCard(act.id)); E.fireMole(g, p, t); p._actedAttack = true; break; }
@@ -718,7 +718,7 @@ function apply(g, p, act, targetId, ratId) {
       } else if (act.feed === 'eat') {
         p.rats = p.rats.filter(x => x.id !== fr.id);
         g.bins.unshift({ id: fr.id, rat: fr });
-        p.stars = Math.min(E.STARS, p.stars + 1);
+        p.stars = Math.min((p.maxStars || E.STARS), p.stars + 1);
         E.logAdd(g, `${p.name} feeds the ${fr.name}, then eats it — back to ${p.stars} stars.`);
       } else if (act.feed === 'alpha') {
         p._alphaGuard = true;
@@ -888,7 +888,7 @@ function botChoose(g, p, acts) {
   }
   // 2b. top up when wounded even if not facing lethal damage right now —
   // otherwise Food/Last Resort effectively never get played.
-  if (p.stars < E.STARS && (threat > 0 || p.stars <= E.STARS - 2)) {
+  if (p.stars < (p.maxStars || E.STARS) && (threat > 0 || p.stars <= (p.maxStars || E.STARS) - 2)) {
     if (has('food_heal')) return has('food_heal');
     // Last Resort is a real cost (you lose the rat), so only when properly hurt
     if (p.stars <= 2 && has('eat_lastresort')) return has('eat_lastresort');

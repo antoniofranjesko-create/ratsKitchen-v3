@@ -240,6 +240,12 @@ function shuffle(a) {
 }
 
 // ── game construction ────────────────────────────────────────────────────
+// test lever: STARSBYP="6,5,4,3" gives 3P/4P/5P/6P their own star count (7P+ uses the last)
+function startStars(P) {
+  if (!process.env.STARSBYP) return STARS;
+  const v = process.env.STARSBYP.split(',').map(Number);
+  return v[Math.min(P - 3, v.length - 1)];
+}
 function newGame(playerDefs) {
   // playerDefs: [{id, name, bot}]
   const P = playerDefs.length;
@@ -247,7 +253,7 @@ function newGame(playerDefs) {
 
   const players = playerDefs.map((d, i) => ({
     id: d.id, name: d.name, bot: !!d.bot, seat: i,
-    stars: STARS, rats: [], hand: [], food: 0,
+    stars: startStars(P), maxStars: startStars(P), rats: [], hand: [], food: 0,
     armed: null,            // {cols:[], age:0} — one at a time
     boardup: 0, territorial: 0, _pelicanBy: null,
     alive: true, turns: 0,
