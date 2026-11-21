@@ -26,6 +26,7 @@ const RATS = {
   boiler: { name: 'Boiler Rat', w: 1, heat: 1, prop: 'no_steal',    col: true,  desc: 'Cannot be Poached.' },
   larder: { name: 'Larder Rat', w: 1, heat: 1, prop: 'feed_eat',    col: true,  desc: 'FEED 1 Food: eat this rat and regain 1 star. Once per turn.' },
   grub:   { name: 'Grub Rat',   w: 1, heat: 2, prop: null,          col: true,  desc: 'Cheap stock but runs hot — weight 1, heat 2. A liability when the inspector calls.' },
+  scav:   { name: 'Scavenger Rat', w: 1, heat: 1, prop: 'scavenge', col: true, desc: 'FEED 1 Food: take a card from a shut-down stall.' },
   hog:    { name: 'Hog Rat',    w: 1, heat: 1, prop: 'feed_grow',   col: true,  desc: 'FEED 1 Food: tuck it under — +1 weight (max 3). The food stays with the rat.' },
   breeder:{ name: 'Breeder Rat',w: 1, heat: 1, prop: 'breed',       col: true,  desc: 'FREE, once per turn: take any rat from the alley.' },
   ratato: { name: 'Ratato Rat', w: 0, heat: 1, prop: null,        col: true,  desc: 'Weight 0, heat 1. Drawn straight into YOUR kitchen — worthless stock that still draws the inspector eye.' },
@@ -134,6 +135,8 @@ function deckConfig(P) {
     if (process.env.NOFOODCARDS) { actions.food = 0; actions.feast = 0; }
     Object.assign(ratMaster, { plain: +(process.env.STREET ?? 4), fat: +(process.env.FATN ?? 6), runner: 3, sow: 3, toll: 3, feral: +(process.env.IMM ?? 3), spice: +(process.env.IMM ?? 3),
       boiler: +(process.env.IMM ?? 3), larder: 3, grub: 3, breeder: 2, alpha: 1, sewer: 2, hog: +(process.env.HOG ?? 3) });
+    // rat sheet v2 (21 Nov): Sow and Larder cut, Scavenger x2; STREETADD tops the deck back up with Street rats
+    if (process.env.SHEET) Object.assign(ratMaster, { sow: 0, larder: 0, scav: 2, plain: ratMaster.plain + +(process.env.STREETADD || 0) });
     return { actions, ratMaster, deckRats: 0, ratatoRats, hotratRats, reshuffleRats: 0 };
   }
   return { actions, ratMaster, deckRats, ratatoRats, hotratRats, reshuffleRats };
@@ -500,7 +503,8 @@ function eliminate(g, t) {
   t.alive = false;
   for (const r of t.rats) g.bins.push({ id: r.id, rat: r });   // rats to rat-bin
   t.rats = [];
-  for (const c of t.hand) g.discard.push(c);   // spent/held cards to discard
+  if (process.env.SHEET) { g.closed = g.closed || []; for (const c of t.hand) g.closed.push(c); }   // the closed stall's cards stay on the table, face-up
+  else for (const c of t.hand) g.discard.push(c);   // spent/held cards to discard
   t.hand = [];
   t.armed = null;
   logAdd(g, `${t.name} is shut down!`);

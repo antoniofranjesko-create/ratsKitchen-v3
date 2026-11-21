@@ -412,7 +412,7 @@ function legalActions(g, p) {
   }
   // Breeder Rat: FREE once per turn — take any rat from the Alley
   if (!p._bredThisTurn && p.rats.some(r => r.prop === 'breed')
-      && g.alley.length && canGainRat(p) && !p._playedRat)
+      && g.alley.length && canGainRat(p) && !p._playedRat && (!process.env.SHEET || foodTotal(p) >= 3))
     push({ type: 'breed', needsAlleyRat: true, label: 'Breeder: take an alley rat (free)' });
 
   // ── FEEDING ───────────────────────────────────────────────────────────────
@@ -429,11 +429,13 @@ function legalActions(g, p) {
         push({ type: 'feed', ratId: r.id, feed: 'draw2', label: 'Feed the Sow (1 Food → draw 2)' });
       if (r.prop === 'feed_eat' && p.stars < (p.maxStars || E.STARS))
         push({ type: 'feed', ratId: r.id, feed: 'eat',   label: 'Feed the Larder (1 Food → eat it, +1 star)' });
-      if (r.prop === 'alpha_feed' && !p._alphaGuard)
+      if (r.prop === 'alpha_feed' && !p._alphaGuard && !process.env.SHEET)
         push({ type: 'feed', ratId: r.id, feed: 'alpha', label: 'Feed the Alpha (1 Food → no poaching until your next turn)' });
       if (r.prop === 'feed_grow' && r.w < 3)
         push({ type: 'feed', ratId: r.id, feed: 'grow', label: 'Feed the Hog (1 Food → +1 weight)' });
-      if (r.prop === 'no_explode' && p.rats.some(x => x._chilliBy))
+      if (r.prop === 'scavenge' && g.closed && g.closed.length)
+        push({ type: 'feed', ratId: r.id, feed: 'scav', label: 'Feed the Scavenger (1 Food → take a card from a closed stall)' });
+      if (r.prop === 'no_explode' && !process.env.SHEET && p.rats.some(x => x._chilliBy))
         push({ type: 'feed', ratId: r.id, feed: 'spice', label: 'Feed the Spice Rat (1 Food → clear a Hot Chilli)' });
     }
   }
@@ -572,6 +574,11 @@ function apply0(g, p, act, targetId, ratId) {
       // honour the player's chosen rat when given; else auto-pick the best
       const r = (ratId && pool.find(x => x.id === ratId)) || pool.slice().sort((a, b) => b.w - a.w)[0];
       if (r && E.tryCat(g, t, r)) { E.logAdd(g, `${t.name}'s Cat shields the ${r.name}.`); p._actedAttack = true; break; }
+      // sheet v2: Alpha — the victim may pay 1 Food to stop the poach
+      if (r && process.env.SHEET && t.rats.some(x => x.prop === 'alpha_feed') && payFood(g, t, 1)) {
+        if (global.__v5) global.__v5.alpha = (global.__v5.alpha || 0) + 1;
+        E.logAdd(g, `${t.name}'s Alpha Rat sees off the poacher.`); p._actedAttack = true; break;
+      }
       if (r) { t.rats = t.rats.filter(x => x.id !== r.id); if (E.ratEnters(g, p, r)) p._ratsIn++; E.logAdd(g, `${p.name} poaches a ${r.name} from ${t.name}.`); }
       p._actedAttack = true; break;
     }
@@ -716,6 +723,8 @@ function apply0(g, p, act, targetId, ratId) {
     }
     case 'inherit': { bin(takeCard(act.id)); t._inheritBy = p.id; p._actedBuild = true; E.logAdd(g, `${p.name} places Inheritance on ${t.name}.`); break; }
     case 'breed': {
+      if (process.env.SHEET && !payFood(g, p, 3)) break;   // sheet v2: Breeder costs 3 Food
+      if (process.env.SHEET && global.__v5) global.__v5.breed = (global.__v5.breed || 0) + 1;
       const b = E.takeFromAlley(g, ratId);
       if (b && E.ratEnters(g, p, b.rat)) {
         p._ratsIn++; p._playedRat = true;
@@ -739,6 +748,10 @@ function apply0(g, p, act, targetId, ratId) {
         g.bins.unshift({ id: fr.id, rat: fr });
         p.stars = Math.min((p.maxStars || E.STARS), p.stars + 1);
         E.logAdd(g, `${p.name} feeds the ${fr.name}, then eats it — back to ${p.stars} stars.`);
+      } else if (act.feed === 'scav') {
+        const pick = g.closed.splice(Math.floor(Math.random() * g.closed.length), 1)[0];
+        if (pick) p.hand.push(pick);
+        if (global.__v5) global.__v5.scav = (global.__v5.scav || 0) + 1;
       } else if (act.feed === 'alpha') {
         p._alphaGuard = true;
       } else if (act.feed === 'grow') {
