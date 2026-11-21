@@ -38,6 +38,7 @@ function startTurn(g) {
   p._fed = {};             // rats fed this turn (once per rat per turn)
   p._v5 = { total: 0, att: false, def: false, drew: false };
   p._alphaGuard = false;
+  kind3Check(g);
   if (process.env.V5) { const S = global.__v5 = global.__v5 || { rat: 0, card: 0, att: 0, def: 0, turns: 0 }; S.turns++; }
 
   // 1) resolve YOUR lingering cards placed last turn (card-as-token): Hot Chilli detonates now
@@ -457,7 +458,25 @@ function legalActions(g, p) {
 }
 
 // ── apply an action ──────────────────────────────────────────────────────────
+// test lever KIND3: the first time a player holds 3 rats of one nest, they take 1 Food (once per game)
+function kind3Check(g) {
+  if (!process.env.KIND3) return;
+  for (const q of g.players) {
+    if (!q.alive || q._kind3) continue;
+    const n = {}; for (const r of q.rats) if (r.col) n[r.col] = (n[r.col] || 0) + 1;
+    if (Object.values(n).some(v => v >= 3)) {
+      q._kind3 = true; q.food = (q.food || 0) + 1;
+      if (global.__v5) global.__v5.k3 = (global.__v5.k3 || 0) + 1;
+      E.logAdd(g, `${q.name} has three of a kind — takes 1 Food.`);
+    }
+  }
+}
 function apply(g, p, act, targetId, ratId) {
+  const res = apply0(g, p, act, targetId, ratId);
+  kind3Check(g);
+  return res;
+}
+function apply0(g, p, act, targetId, ratId) {
   const t = targetId ? g.players.find(x => x.id === targetId) : null;
   // 2 card-plays per turn. Firing an already-armed inspection is FREE (arming
   // already cost a play last turn); Sow draw and End are free.
