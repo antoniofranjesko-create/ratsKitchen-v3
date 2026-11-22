@@ -525,7 +525,9 @@ function apply(g, p, act, targetId, ratId) {
       return;
     }
   }
+  const hk = global.__applyHook ? global.__applyHook.pre(g, p, act, targetId) : null;   // read-only analysis hook (tools/long-mode)
   const res = apply0(g, p, act, targetId, ratId);
+  if (hk) global.__applyHook.post(hk);
   kind3Check(g);
   return res;
 }
