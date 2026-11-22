@@ -271,6 +271,8 @@ function payFood(g, p, n) {
 //   V5TURN=plus : play 1 card AND then take a rat or draw a card
 const V5FREE = { fire: 1, feed: 1, breed: 1, end: 1, fire_wait: 1, fire_blocked: 1, v5rat: 1, v5card: 1, v5food: 1 };
 const V5DEF = { food_heal: 1, eat_lastresort: 1, boardup: 1, cat: 1, gambit: 1, copycat: 1 };
+// ARMDEF: arming an inspection names no rival yet, so it counts as a card on yourself
+if (process.env.ARMDEF) { V5DEF.sched1 = 1; V5DEF.sched2 = 1; }
 function v5cat(p, act, targetId) {
   if (V5FREE[act.type]) return 'free';
   if (act.type === 'delivery' || act.type === 'exterm') return (targetId ? targetId === p.id : (act.targets||[]).includes(p.id)) ? 'def' : 'att';
@@ -282,6 +284,7 @@ function v5ok(p, cat) {
   if (m === 'plus') return u.total < 1;
   if (u.drew) return false;
   if (m === 'one') return u.total < 1;
+  if (m === 'two') return u.total < 2;   // 22 Nov: any 2 cards, no attack/defence split
   return !u[cat];   // ad
 }
 
