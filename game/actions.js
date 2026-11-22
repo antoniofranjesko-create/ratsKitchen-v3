@@ -266,7 +266,7 @@ function payFood(g, p, n) {
 //   V5TURN=ad   : play 1 attack and/or 1 defence | take a rat | draw a card
 //   V5TURN=plus : play 1 card AND then take a rat or draw a card
 const V5FREE = { fire: 1, feed: 1, breed: 1, end: 1, fire_wait: 1, fire_blocked: 1, v5rat: 1, v5card: 1 };
-const V5DEF = { food_heal: 1, eat_lastresort: 1, boardup: 1, cat: 1, gambit: 1 };
+const V5DEF = { food_heal: 1, eat_lastresort: 1, boardup: 1, cat: 1, gambit: 1, copycat: 1 };
 function v5cat(p, act, targetId) {
   if (V5FREE[act.type]) return 'free';
   if (act.type === 'delivery' || act.type === 'exterm') return (targetId ? targetId === p.id : (act.targets||[]).includes(p.id)) ? 'def' : 'att';
@@ -318,6 +318,18 @@ function legalActions(g, p) {
     if (t === 'chilli' && true) {
       const vics = freeZones(opps).filter(o => o.rats.some(r => r.prop !== 'no_explode' && !r._chilliBy));
       if (vics.length) push({ id: c.id, type: t, needsTarget: true, needsRat: 'target', targets: vics.map(o => o.id), label: 'Hot Chilli (place on a rat)' });
+    }
+    // ---- Scrap Fight (test): both have rats ----
+    if (t === 'fight' && process.env.FIGHT && p.rats.length) {
+      const tg = freeZones(opps).filter(o => o.rats.length && o.boardup === 0);
+      if (tg.length) push({ id: c.id, type: t, needsTarget: true, targets: tg.map(o => o.id), label: 'Scrap Fight' });
+    }
+    // ---- Copycat (test): use a Feed ability of any rat on the table ----
+    if (t === 'copycat' && process.env.COPY) {
+      const all = g.players.filter(x => x.alive).flatMap(x => x.rats);
+      const ft = foodTotal(p);
+      const can = (all.some(r => r.prop === 'breed') && ft >= 3 && g.alley.length) || (all.some(r => r.prop === 'feed_draw') && ft >= 1) || (all.some(r => r.prop === 'scavenge') && ft >= 1 && g.closed && g.closed.length);
+      if (can) push({ id: c.id, type: t, label: 'Copycat' });
     }
     // ---- Muzzle / Disease (test): tuck under a rival's rat; Spice can't be debuffed ----
     if ((t === 'muzzle' || t === 'disease') && process.env.NERFS) {
@@ -624,6 +636,34 @@ function apply0(g, p, act, targetId, ratId) {
       if (r) { r._chilliBy = p.id; E.logAdd(g, `${p.name} plants a Hot Chilli on ${t.name}'s ${r.name} — it blows next turn.`); }
       p._actedAttack = true; break;
     }
+    case 'fight': {
+      bin(takeCard(act.id));
+      // both pick secretly: value Teeth, but keep heavy rats for Rat King
+      const pick = q => q.rats.slice().sort((a, b) => (b.teeth - 8 * b.w + Math.random() * 6) - (a.teeth - 8 * a.w + Math.random() * 6))[0];
+      const mine = (ratId && p.rats.find(x => x.id === ratId)) || pick(p), theirs = pick(t);
+      if (!mine || !theirs) break;
+      const S = global.__v5; if (S) S.fight = (S.fight || 0) + 1;
+      if (mine.teeth === theirs.teeth) { p.rats = p.rats.filter(x => x !== mine); t.rats = t.rats.filter(x => x !== theirs); g.bins.push({ id: mine.id, rat: mine }, { id: theirs.id, rat: theirs }); }
+      else {
+        const [win, wr, lose] = mine.teeth > theirs.teeth ? [p, mine, t] : [t, theirs, p];
+        win.rats = win.rats.filter(x => x !== wr); g.bins.push({ id: wr.id, rat: wr });
+        E.damage(g, lose, 1);
+        if (S && win === p) S.fightwin = (S.fightwin || 0) + 1;
+        E.logAdd(g, `Scrap Fight: ${p.name}'s ${mine.name} (Teeth ${mine.teeth}) vs ${t.name}'s ${theirs.name} (Teeth ${theirs.teeth}) — ${win.name} wins, ${lose.name} loses a star.`);
+      }
+      p._actedAttack = true; break;
+    }
+    case 'copycat': {
+      const all = g.players.filter(x => x.alive).flatMap(x => x.rats);
+      let done = false;
+      if (all.some(r => r.prop === 'breed') && foodTotal(p) >= 3 && g.alley.length && E.weight(p) < THRESHOLD) { payFood(g, p, 3); const b = E.takeFromAlley(g, null); if (b) E.ratEnters(g, p, b.rat); done = 'breeder'; }
+      else if (all.some(r => r.prop === 'scavenge') && g.closed && g.closed.length && foodTotal(p) >= 1) { payFood(g, p, 1); p.hand.push(g.closed.splice(Math.floor(Math.random() * g.closed.length), 1)[0]); done = 'scavenger'; }
+      else if (all.some(r => r.prop === 'feed_draw') && foodTotal(p) >= 1) { payFood(g, p, 1); const c = E.drawCard(g); if (c) resolveDraw(g, p, c, true); done = 'runner'; }
+      if (!done) break;   // nothing to copy: card stays in hand
+      bin(takeCard(act.id));
+      const S = global.__v5; if (S) { S.copy = (S.copy || 0) + 1; S['copy_' + done] = (S['copy_' + done] || 0) + 1; }
+      break;
+    }
     case 'muzzle': case 'disease': {
       bin(takeCard(act.id));
       const ok = r => r.prop !== 'no_explode' && (act.type === 'muzzle' ? (r.prop && !r._muzzled) : (r._dis || 0) < 1);
@@ -870,7 +910,11 @@ function botTurnV5(g, p) {
         const d = has('disease'), mz = has('muzzle');
         const dr = lead.rats.find(r => r.prop !== 'no_explode' && !r._dis && myCols.includes(r.col));
         const mr = lead.rats.find(r => ABILS.includes(r.prop));
-        if (d && d.targets.includes(lead.id) && dr) { choice = d; choice._pick = dr.id; }
+        const fi = has('fight');
+        const myBest = p.rats.slice().sort((a, b) => (b.teeth - 8 * b.w) - (a.teeth - 8 * a.w))[0];
+        if (fi && myBest && myBest.w <= 1 && myBest.teeth >= 24) { choice = fi; }
+        else if (has('copycat') && (foodTotal(p) >= 3 || p.hand.length <= 3)) { choice = has('copycat'); }
+        else if (d && d.targets.includes(lead.id) && dr) { choice = d; choice._pick = dr.id; }
         else if (mz && mz.targets.includes(lead.id) && mr) { choice = mz; choice._pick = mr.id; }
       }
     }

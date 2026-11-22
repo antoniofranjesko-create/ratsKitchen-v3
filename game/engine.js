@@ -61,6 +61,8 @@ const CARDS = {
   wd_snap2:    { name: 'Snap Inspection',  sub: 'Two Colour', cls: 'drawn', desc: 'WHEN DRAWN, reveal at once — it fires on YOU. Has two fixed colours: you lose 1 star per rat you hold of EITHER. Harder to dodge than the one-colour version. Cannot be held or played.' },
   wd_mole:     { name: 'Snap Inspection',  sub: 'Naked Mole Rat', cls: 'drawn', desc: 'WHEN DRAWN, reveal at once — it fires on YOU. The mole is blind to colour: a flat -1 star, no matter what you hold. Cannot be held or played.' },
   desperate:   { name: 'Dodgy Inspector', cls: 'engine', desc: 'He docks your rating — lose 1 star — but he is on the take, and looks the other way while you help yourself to any rat from the alley.' },
+  fight:       { name: 'Scrap Fight',     cls: 'attack', desc: 'Challenge a rival. Both secretly pick one of their rats and reveal: longer Teeth wins. The winner-s rat goes to the bins; the loser loses 1 star.' },
+  copycat:     { name: 'Copycat',         cls: 'engine', desc: 'Use the Feed ability of any rat on the table once, paying its cost.' },
   muzzle:      { name: 'Muzzle',          cls: 'nerf', desc: 'Tuck under a rival-s rat: it loses its ability while the Muzzle stays.' },
   disease:     { name: 'Disease',         cls: 'nerf', desc: 'Tuck under a rival-s rat: +1 heat.' },
   feast:       { name: 'Feast',           cls: 'buff', desc: 'Counts as 2 Food.' },
@@ -134,6 +136,8 @@ function deckConfig(P) {
     actions.desperate = 0;
     actions.inherit = +(process.env.INHN ?? 3);
     actions.muzzle = process.env.NERFS ? +(process.env.MUZN ?? 3) : 0;
+    actions.fight = process.env.FIGHT ? +(process.env.FIGHTN ?? 3) : 0;
+    actions.copycat = process.env.COPY ? +(process.env.COPYN ?? 3) : 0;
     actions.disease = process.env.NERFS ? +(process.env.DISN ?? 4) : 0;   // Inheritance back x3 (take 2 cards) — locked 21 Nov
     actions.feast = +(process.env.FEAST ?? 4);
     if (process.env.NOFOODCARDS) { actions.food = 0; actions.feast = 0; }
@@ -166,11 +170,18 @@ function makeRat(kind, colour) {
   if (process.env.V5 && kind === 'alpha') { const r = makeRat0(kind, colour); r.prop = 'alpha_feed'; return r; }
   return makeRat0(kind, colour);
 }
+// Teeth (rat sheet v2): every card its own number; weak inverse link to weight, with outliers
+const TEETH = { ratato: [3, 5, 23, 29], fat: [1, 2, 8, 12, 13, 30], hog: [6, 9, 19], plain: [10, 15, 18, 21], sewer: [26, 38],
+  runner: [7, 16, 31], breeder: [20, 27], toll: [11, 17, 28], spice: [14, 32], grub: [35, 36, 37], boiler: [4, 22],
+  feral: [25, 39], alpha: [24], scav: [33, 34] };
+const _tc = {};
 function makeRat0(kind, colour) {
   const d = RATS[kind];
+  const tl = TEETH[kind]; let teeth = 0;
+  if (tl) { _tc[kind] = (_tc[kind] || 0) % tl.length; teeth = tl[_tc[kind]++]; }
   return {
     id: rid(), kind, name: d.name, w: d.w, heat: d.heat,
-    prop: d.prop, col: d.col ? colour : null,
+    prop: d.prop, col: d.col ? colour : null, teeth,
   };
 }
 
