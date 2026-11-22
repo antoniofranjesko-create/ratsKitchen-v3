@@ -36,8 +36,8 @@ const RATS = {
 // action card catalogue: type -> {name, cls}
 const CARDS = {
   mole:        { name: 'Health Inspection', sub: 'Naked Mole Rat', cls: 'attack', desc: 'Snap inspection. Any rival, flat -1 star, immediately. Colour-agnostic (the mole is blind).' },
-  sched1:      { name: 'Health Inspection', sub: 'Scheduled — 1 Colour', cls: 'attack', desc: 'Has one fixed colour. Arm it, then on a later turn fire at a rival — damage = their heat in that colour. Whiffs if they hold none.' },
-  sched2:      { name: 'Health Inspection', sub: 'Scheduled — 2 Colour', cls: 'attack', desc: 'Has two fixed colours. Arm it, then on a later turn fire at a rival — damage = their heat in those two colours. Whiffs if they hold neither.' },
+  sched1:      { name: 'Health Inspection', sub: process.env.V5 ? 'Scheduled — 1 Nest' : 'Scheduled — 1 Colour', cls: 'attack', desc: process.env.V5 ? 'Names one nest. Arm it, then on your next turn fire at a rival — damage = their heat in that nest. Whiffs if they have no rats there.' : 'Has one fixed colour. Arm it, then on a later turn fire at a rival — damage = their heat in that colour. Whiffs if they hold none.' },
+  sched2:      { name: 'Health Inspection', sub: process.env.V5 ? 'Scheduled — 2 Nest' : 'Scheduled — 2 Colour', cls: 'attack', desc: process.env.V5 ? 'Names two nests. Arm it, then on your next turn fire at a rival — pick one of its nests; damage = their heat there.' : 'Has two fixed colours. Arm it, then on a later turn fire at a rival — damage = their heat in those two colours. Whiffs if they hold neither.' },
   poach:       { name: 'Poach',           cls: 'attack', desc: 'Steal one weight-1 rat from a rival. You choose which.' },
   switch:      { name: 'Switcheroo',      cls: 'attack', desc: 'Swap one of your rats for a rival-s, regardless of weight.' },
   chilli:      { name: 'Hot Chilli',      cls: 'attack', desc: 'Place on a rival-s rat. It explodes at the start of your next turn — rat to the bins.' },
@@ -156,7 +156,7 @@ function deckConfig(P) {
 // Curfew CUT to hit 6 — it's a pure social-layer no-op vs bots anyway.
 // Cheese Glut and Rat Boom remain parked from the prior pass.
 const MARKET_EVENTS = [
-  { event: 'rat_release',  name: 'Rat Release',       desc: 'The player holding the fewest rats takes 1 rat from the alley. Tied? Fewest cards. Still tied? They each draw from the deck.' },
+  { event: 'rat_release',  name: 'Rat Release',       desc: 'The player holding the fewest rats takes 1 rat from the ' + (process.env.V5 ? 'rat deck' : 'alley') + '. Tied? Fewest cards. Still tied? They each draw from the deck.' },
   { event: 'frenzy',       name: 'Frenzy',            desc: 'Every player draws 1 card.' },
   { event: 'blackout',     name: 'Blackout',          desc: 'Every player discards 1 card.' },
   { event: 'pied_piper',   name: 'Pied Piper',        desc: 'Every player passes one of their own rats one seat to the left, simultaneously.' },

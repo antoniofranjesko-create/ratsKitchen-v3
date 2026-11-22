@@ -336,7 +336,8 @@ button:disabled{opacity:.35;cursor:not-allowed}
 .mb-nums{display:flex;gap:10px;font-family:'Barlow Condensed';font-size:11px;letter-spacing:1px;
   text-transform:uppercase;color:var(--bone-dim);white-space:nowrap}
 .mb-nums b{font-family:'Bebas Neue';font-size:17px;font-weight:400;line-height:1;margin-right:2px}
-.mb-nums .w b{color:var(--lamp)} .mb-nums .h b{color:var(--danger)}
+.mb-nums .w b{color:var(--lamp)} .mb-nums .h b{color:var(--danger)} .mb-nums .f b{color:#8fd16a}
+.stat.food .v{color:#8fd16a}
 .mb-rats{display:flex;gap:5px;overflow-x:auto;flex:1;min-width:0;align-items:center;padding:2px 0}
 .mb-none{font-family:'Barlow Condensed';font-size:11px;letter-spacing:2px;text-transform:uppercase;color:var(--ash)}
 .mb-extra{display:flex;flex-direction:column;gap:3px;flex:0 1 auto;align-items:flex-end}
@@ -388,6 +389,7 @@ button:disabled{opacity:.35;cursor:not-allowed}
   .stall.dead .counter,.stall.dead .pips,.stall.dead .kcards{display:none}
   .stall.dead::after{font-size:15px;letter-spacing:3px;transform:none;justify-content:flex-end;padding-right:12px}
   .stat .v::after{content:'🔥';font-size:9px;margin-left:1px}
+  .stat.food .v::after{content:'🍖'}
   .stalls.many .stall{grid-template-columns:1fr}
   .stalls.many .stats{justify-content:flex-start;margin-top:3px}
   .kcards{grid-column:1/-1}
@@ -475,7 +477,7 @@ button:disabled{opacity:.35;cursor:not-allowed}
 <body>
 <div class="topbar">
   <div class="brand">RAT'S <b>KITCHEN</b></div>
-  <div class="meta"><button id="btnLeave" class="ghost leavebtn hidden">Leave table</button><span class="build">BUILD v4.1.2</span></div>
+  <div class="meta"><button id="btnLeave" class="ghost leavebtn hidden">Leave table</button><span class="build">BUILD L1.0 · LONG MODE</span></div>
 </div>
 
 <div id="lobby" class="wrap">
@@ -632,6 +634,7 @@ function renderMarket(){
 function render(){
   if(!STATE) return;
   $('binsN').textContent=STATE.binsRats;
+  if(STATE.longMode){ const k=$('binsN').nextElementSibling; if(k) k.textContent=STATE.closedCards?`rat deck · ${STATE.closedCards} in closed stalls`:'rat deck'; $('alleyPanel').style.display='none'; }
   $('deckN').textContent=STATE.deckLeft;
   $('turnN').textContent=STATE.turn;
   renderMarket();
@@ -729,13 +732,13 @@ function render(){
     }).join(', ');
     $('dockPrompt').innerHTML = `<span class="drewnote">↓ You drew: <b>${esc(drew)}</b></span>`;
   } else {
-    $('dockPrompt').textContent = STATE.over ? '' : (meActive ? 'Your turn — play a card or act' : waitingMsg());
+    $('dockPrompt').textContent = STATE.over ? '' : (meActive ? (STATE.longMode ? 'Your turn — play up to 1 attack + 1 defence, or take a rat, or draw a card' : 'Your turn — play a card or act') : waitingMsg());
   }
   // a selected card explains itself (phone cards are too small for rules text)
   const selC = selectedCardId && meP && (meP.hand||[]).find(c=>c.id===selectedCardId);
   if(selC && !fireReady) $('dockPrompt').innerHTML = `<b>${esc(selC.name)}</b> — ${esc(selC.desc||'')}`;
   renderActions(meActive);
-  $('log').innerHTML=STATE.log.map(l=>formatLog(l)).join('');
+  $('log').innerHTML=STATE.log.map(l=>formatLog(STATE.longMode?nestWords(l):l)).join('');
   $('log').scrollTop=$('log').scrollHeight;
   if(STATE.over){
     const w=STATE.players.find(p=>p.id===STATE.winner);
@@ -811,7 +814,7 @@ function stallHTML(p){
   if(p.id===STATE.active&&!STATE.over) cls.push('active');
   if(p.id===YOU) cls.push('you');
   if(!p.alive) cls.push('dead');
-  const maxStars=STATE.maxStars||4;
+  const maxStars=p.maxStars||STATE.maxStars||4;
   const bulbs=Array.from({length:maxStars},(_,i)=>`<span class="bulb ${i<p.stars?'':'out'}"></span>`).join('');
   const pct=Math.min(100,(p.weight/STATE.threshold)*100);
   const ticks=Array.from({length:STATE.threshold},()=>'<i></i>').join('');
@@ -845,6 +848,7 @@ function stallHTML(p){
       <div class="king"><div class="k"><span>Rat King</span><b>${p.weight} / ${STATE.threshold}</b></div>
         <div class="meter"><div class="fill" style="width:${pct}%"></div><div class="ticks">${ticks}</div></div></div>
       <div class="stat"><span class="k">Heat</span><span class="v">${p.heat}</span></div>
+      ${STATE.longMode?`<div class="stat food"><span class="k">Food</span><span class="v">${p.food||0}</span></div>`:''}
     </div>
     ${rats}
     ${kitchenRow}
@@ -860,7 +864,7 @@ function renderMyBar(){
   bar.className='mybar'+((p.id===STATE.active&&!STATE.over)?' active':'')+(crown?' crown':'');
   bar.dataset.id=p.id; bar.onclick=null;
   if(!p.alive){ bar.innerHTML='<span class="mb-none">Your stall is shut down — you are watching</span>'; return; }
-  const maxStars=STATE.maxStars||4;
+  const maxStars=p.maxStars||STATE.maxStars||4;
   const bulbs=Array.from({length:maxStars},(_,i)=>`<span class="bulb ${i<p.stars?'':'out'}"></span>`).join('');
   const extra=[];
   if(crown) extra.push('<span class="pip crownpip">Hold on — you win next turn</span>');
@@ -870,11 +874,15 @@ function renderMyBar(){
   }
   (p.kitchenCards||[]).forEach(kc=>extra.push(`<span class="pip terr" title="placed by ${esc(kc.by)}">${esc(kc.name)}</span>`));
   bar.innerHTML=`<div class="mb-stats"><span class="stars">${bulbs}</span>
-      <span class="mb-nums"><span class="w"><b>${p.weight}</b>/ ${STATE.threshold} weight</span><span class="h"><b>${p.heat}</b>heat</span></span></div>
+      <span class="mb-nums"><span class="w"><b>${p.weight}</b>/ ${STATE.threshold} weight</span><span class="h"><b>${p.heat}</b>heat</span>${STATE.longMode?`<span class="f"><b>${p.food||0}</b>food</span>`:''}</span></div>
     <div class="mb-rats">${p.rats.length?p.rats.map(ratHTML).join(''):'<span class="mb-none">no rats yet</span>'}</div>
     ${extra.length?`<div class="mb-extra">${extra.join('')}</div>`:''}`;
 }
-function colDot(c){const m={red:'🔴',blue:'🔵',green:'🟢',yellow:'🟡'};return m[c]||'⚪'}
+// long mode: rats live in nests (Grill / Cold store / Pantry) instead of colours
+const NEST={red:'🔥',blue:'❄️',green:'🌾'}, NESTNAME={red:'Grill',blue:'Cold store',green:'Pantry'};
+// long mode: rewrite colour words in log lines as nest names
+function nestWords(l){const f=t=>typeof t==='string'?t.replace(/\bred\b/gi,'Grill').replace(/\bblue\b/gi,'Cold store').replace(/\bgreen\b/gi,'Pantry').replace(/colou?r/gi,'nest'):t;return typeof l==='string'?f(l):Object.assign({},l,{text:f(l.text)});}
+function colDot(c){if(STATE&&STATE.longMode)return NEST[c]||'⚪';const m={red:'🔴',blue:'🔵',green:'🟢',yellow:'🟡'};return m[c]||'⚪'}
 function ratHTML(r){
   const col=r.col||'none';const cls=['rat',col];
   if(r.kind==='alpha') cls.push('alpha');
@@ -888,7 +896,10 @@ function ratHTML(r){
   if(r.prop==='feed_draw')  marks.push('<span class="ratmark act" title="Runner — feed 1 Food: draw 1, once a turn">🍖</span>');
   if(r.prop==='feed_draw2') marks.push('<span class="ratmark act" title="Sow — feed 1 Food: draw 2, once a turn">🍖</span>');
   if(r.prop==='feed_eat')   marks.push('<span class="ratmark act" title="Larder — feed 1 Food: eat it for 1 star, once a turn">🍖</span>');
-  return `<div class="${cls.join(' ')} ratclick" data-rat='${esc(JSON.stringify({kind:r.kind,name:r.name,w:r.w,heat:r.heat,col:r.col,desc:r.desc||"",prop:r.prop||null}))}' title="${esc(r.name)} · tap for role">
+  if(r.muzzled) marks.push('<span class="ratmark" title="Muzzled — ability switched off">🤐</span>');
+  if(r.diseased) marks.push('<span class="ratmark hot" title="Diseased — +1 heat">🦠</span>');
+  if(STATE&&STATE.longMode&&r.col) marks.push(`<span class="ratmark" title="Nest: ${NESTNAME[r.col]||''}">${NEST[r.col]||''}</span>`);
+  return `<div class="${cls.join(' ')} ratclick" data-rat='${esc(JSON.stringify({kind:r.kind,name:r.name,w:r.w,heat:r.heat,col:r.col,desc:r.desc||"",prop:r.prop||null,teeth:r.teeth||0,muzzled:!!r.muzzled,diseased:!!r.diseased}))}' title="${esc(r.name)} · tap for role">
     <div class="band"></div>
     ${marks.length?`<div class="ratmarks">${marks.join('')}</div>`:''}
     <div class="art">${RAT_ART[r.kind]||'🐀'}</div>
@@ -967,7 +978,7 @@ function playVerb(a,card){
     territorial:'Mark territorial',grease:'Grease their inspector',boardup:'Board up',cat:'Shield a rat',wok:'Ready a Wok block',
     rattrap:'Set a rat trap',pelican:'Send the pelican',delivery:'Deliver an alley rat',recycle:'Recycle a discard',
     exterm:'Exterminate a rat',inherit:'Place Inheritance',desperate:'Dodgy Inspector (-1 star)',feed:'Feed the rat (1 Food)',breed:'Breeder: take alley rat',gambit:'Look at top 3',klepto:'Lift a card',shakedown:'Shake down for a card',
-    lastresort:'Eat a rat for stars',food_heal:'Spend 2 Food (+star)',breed:'Breeder: 2 Food → rat',misc:'Do the odd job'};
+    lastresort:'Eat a rat for stars',fight:'Start a Scrap Fight',muzzle:'Muzzle a rat',disease:'Infect a rat',food_heal:'Spend 2 Food (+star)',breed:'Breeder: 2 Food → rat',misc:'Do the odd job'};
   return map[a.type]||a.label;
 }
 function showCardInfo(card){
@@ -986,13 +997,13 @@ function showCardInfo(card){
 function showRatInfo(r){
   const hasTask = r.prop && r.prop!=='plain rat, no special task';
   const roleLabel = hasTask ? 'Special rat' : 'Plain stock — no special task';
-  const colTxt = r.col ? ({red:'🔴 Red',blue:'🔵 Blue',green:'🟢 Green',yellow:'🟡 Yellow'}[r.col]||r.col) : 'Colourless';
+  const colTxt = (STATE&&STATE.longMode) ? (r.col ? `${NEST[r.col]} ${NESTNAME[r.col]} nest` : 'No nest') : (r.col ? ({red:'🔴 Red',blue:'🔵 Blue',green:'🟢 Green',yellow:'🟡 Yellow'}[r.col]||r.col) : 'Colourless');
   const wrap=document.createElement('div');
   wrap.className='cardinfo';
   wrap.innerHTML=`<div class="box">
     <div class="top" style="background:var(--lamp);color:var(--grease)">${roleLabel}</div>
     <h3>🐀 ${esc(r.name)}</h3>
-    <p style="padding-bottom:4px"><b>Weight ${r.w}</b> · <b>Heat ${r.heat}</b> · ${colTxt}</p>
+    <p style="padding-bottom:4px"><b>Weight ${r.w}</b> · <b>Heat ${r.heat}</b>${r.teeth?` · <b>Teeth ${r.teeth}</b>`:''} · ${colTxt}${r.muzzled?' · 🤐 muzzled':''}${r.diseased?' · 🦠 diseased':''}</p>
     <p>${esc(r.desc||'A plain rat with no special ability — just stock in your kitchen.')}</p>
     <div class="foot"><button data-close="1">Close</button></div>
   </div>`;
@@ -1029,6 +1040,9 @@ function choose(a){
   // Exterminator: pick a kitchen, then which rat in it to remove
   if(a.type==='exterm'){ picking={act:a,targets:a.targets,msg:'Exterminator — click a kitchen',then:'exterm'}; selectedCardId=null; render(); return; }
   // Hot Chilli / Poach: pick a kitchen, then WHICH of their rats
+  if(a.type==='muzzle'||a.type==='disease'){ picking={act:a,targets:a.targets,msg:(a.type==='muzzle'?'Muzzle':'Disease')+' — click a kitchen',then:'targetRat'}; selectedCardId=null; render(); return; }
+  // Scrap Fight: pick a rival, then secretly choose your fighter (their rat is chosen by them)
+  if(a.type==='fight'){ picking={act:a,targets:a.targets,msg:'Scrap Fight — click a rival',then:'myRat'}; selectedCardId=null; render(); return; }
   if(a.type==='chilli'||a.type==='poach'){ picking={act:a,targets:a.targets,msg:(a.type==='chilli'?'Hot Chilli':'Poach')+' — click a kitchen',then:'targetRat'}; selectedCardId=null; render(); return; }
   // Switcheroo: pick a kitchen, then their rat, then yours
   if(a.type==='switch'){ picking={act:a,targets:a.targets,msg:'Switcheroo — click a kitchen',then:'switchRats'}; selectedCardId=null; render(); return; }
@@ -1128,8 +1142,8 @@ async function alleyPick(a){
 }
 function ratOpts(rats){
   return rats.map(r=>{
-    const dot={red:'🔴',blue:'🔵',green:'🟢'}[r.col]||'⚪';
-    return {label:`${dot} ${esc(r.name)} · w${r.w} h${r.heat}`, value:r.id};
+    const dot=colDot(r.col);
+    return {label:`${dot} ${esc(r.name)} · w${r.w} h${r.heat}${r.teeth?` · 🦷${r.teeth}`:''}`, value:r.id};
   });
 }
 // pick one of the TARGET's rats (Hot Chilli, Poach)
@@ -1138,8 +1152,10 @@ async function pickTargetRat(a, targetId){
   let rats=(k&&k.rats)||[];
   if(a.type==='chilli') rats=rats.filter(r=>r.prop!=='no_explode'&&!r.chilli);
   if(a.type==='poach')  rats=rats.filter(r=>r.prop!=='no_steal'&&r.w<=1);
+  if(a.type==='muzzle') rats=rats.filter(r=>r.prop&&r.prop!=='no_explode'&&!r.muzzled);
+  if(a.type==='disease') rats=rats.filter(r=>r.prop!=='no_explode'&&!r.diseased);
   if(!rats.length){ render(); return; }
-  const verb=a.type==='chilli'?'Plant the chilli on which rat?':'Poach which rat?';
+  const verb={chilli:'Plant the chilli on which rat?',poach:'Poach which rat?',muzzle:'Muzzle which rat?',disease:'Infect which rat?'}[a.type]||'Which rat?';
   const pick=await modalPick(verb+' ('+esc(k.name)+')', ratOpts(rats));
   if(pick) socket.emit('act',{type:a.type,id:a.id,target:targetId,ratId:pick});
   else render();
@@ -1149,7 +1165,7 @@ async function pickMyRat(a, targetId){
   const me=STATE.players.find(x=>x.id===YOU);
   const rats=(me&&me.rats)||[];
   if(!rats.length){ render(); return; }
-  const pick=await modalPick('Dump which of your rats?', ratOpts(rats));
+  const pick=await modalPick(a.type==='fight'?'Send which rat to fight? (longer Teeth wins)':'Dump which of your rats?', ratOpts(rats));
   if(pick) socket.emit('act',{type:a.type,id:a.id,target:targetId,ratId:pick});
   else render();
 }

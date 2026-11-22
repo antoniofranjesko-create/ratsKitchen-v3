@@ -521,7 +521,7 @@ function apply0(g, p, act, targetId, ratId) {
     if (c5 !== 'free') { p._v5.total++; p._v5[c5] = true; }
     const S = global.__v5 = global.__v5 || { rat: 0, card: 0, att: 0, def: 0, turns: 0 };
     if (act.type === 'v5rat' || act.type === 'v5card') p._v5.drew = true;
-    if (act.type === 'v5rat') { S.rat++; const b = E.takeFromAlley(g, null); if (b) { E.ratEnters(g, p, b.rat); E.logAdd(g, `${p.name} takes a ${b.rat.name} from the rat deck.`); } return; }
+    if (act.type === 'v5rat') { S.rat++; const b = E.takeFromAlley(g, null); if (b) { if (E.ratEnters(g, p, b.rat)) E.logAdd(g, `${p.name} takes a ${b.rat.name} from the rat deck.`); else E.logAdd(g, `${p.name}'s kitchen is closed to rats — it goes back.`); } return; }
     if (act.type === 'v5card') { S.card++; const c = E.drawCard(g); if (c) resolveDraw(g, p, c, true); return; }
     if (c5 !== 'free') S[c5]++;
   }
@@ -800,8 +800,8 @@ function apply0(g, p, act, targetId, ratId) {
       const b = E.takeFromAlley(g, ratId);
       if (b && E.ratEnters(g, p, b.rat)) {
         p._ratsIn++; p._playedRat = true;
-        E.logAdd(g, `${p.name}'s Breeder takes a ${b.rat.name} from the alley.`);
-      }
+        E.logAdd(g, process.env.V5 ? `${p.name}'s Breeder takes a ${b.rat.name} from the rat deck.` : `${p.name}'s Breeder takes a ${b.rat.name} from the alley.`);
+      } else if (b && process.env.V5) { E.logAdd(g, `${p.name}'s kitchen is closed to rats — the Breeder's rat goes back.`); }   // ratEnters already returned it to the rat deck
       p._bredThisTurn = true; p._actedBuild = true; break;
     }
     case 'feed': {

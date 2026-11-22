@@ -1,3 +1,8 @@
+// ── LONG MODE (branch long-mode): this server runs long mode v1 by default ──
+// Any of these can still be overridden with an environment variable.
+const LONG_DEFAULTS = { V5: '1', V5TURN: 'ad', IMM: '2', FOODINC: 'A', NOFOODCARDS: '1', HEALCOST: '3', THRESH: '10',
+  STARSBYP: '6,5,4,3', KIND3: '1', SHEET: '1', NERFS: '1', FIGHT: '1', FIGHTCH: '1', FIGHTN: '2', CUT: 'exterm', BLOCKSWAP: '1' };
+for (const [k, v] of Object.entries(LONG_DEFAULTS)) if (process.env[k] === undefined) process.env[k] = v;
 // RAT'S KITCHEN v3 — SERVER
 'use strict';
 const express = require('express');
@@ -38,7 +43,7 @@ function project(g, viewerId, room) {
   const seat = id => room && room.players.find(x => x.id === id);
   return {
     over: g.over, winner: g.winner, active: g.players[g.active] && g.players[g.active].id,
-    turn: g.turn, threshold: E.THRESHOLD, maxStars: E.STARS, anyElim: g._firstElimTurn != null, log: g.log.slice(-40),
+    turn: g.turn, threshold: E.THRESHOLD, maxStars: E.STARS, longMode: !!process.env.V5, closedCards: (g.closed || []).length, anyElim: g._firstElimTurn != null, log: g.log.slice(-40),
     lastPlayed: g.lastPlayed || null,
     awaitingStep: (() => {
       // a step is available when the game isn't over, it's a bot's turn coming up,
@@ -48,9 +53,9 @@ function project(g, viewerId, room) {
       return active && active.bot;
     })(),
     stepMode: !!(room && room.stepMode),
-    binsRats: g.bins.filter(b => b.rat).length,
+    binsRats: g.bins.filter(b => b.rat).length + (process.env.V5 ? (g.alley || []).length : 0),   // long mode: the hidden top rat counts as part of the rat deck
     // THE ALLEY — 3 face-up rats
-    alley: (g.alley||[]).map(c => ({ id:c.rat.id, kind:c.rat.kind, name:c.rat.name,
+    alley: (process.env.V5 ? [] : (g.alley||[])).map(c => ({ id:c.rat.id, kind:c.rat.kind, name:c.rat.name,
       w:c.rat.w, heat:c.rat.heat, col:c.rat.col, prop:c.rat.prop,
       desc:(E.RATS[c.rat.kind]&&E.RATS[c.rat.kind].desc)||'' })),
     deckLeft: g.deck.length,
@@ -61,9 +66,9 @@ function project(g, viewerId, room) {
     players: g.players.map(p => ({
       id: p.id, name: p.name, bot: p.bot, alive: p.alive,
       connected: p.bot || !!(seat(p.id) && seat(p.id).connected),
-      stars: p.stars, weight: E.weight(p), heat: E.heat(p), count: p.rats.length,
+      stars: p.stars, maxStars: p.maxStars || E.STARS, food: p.food || 0, weight: E.weight(p), heat: E.heat(p), count: p.rats.length,
       // rats are public (zones are public) — show kind + colour, no ids to others
-      rats: p.rats.map(r => ({ id: r.id, kind: r.kind, name: r.name, w: r.w, heat: r.heat, col: r.col, cols: r.cols||null, prop: r.prop, desc: (E.RATS[r.kind]&&E.RATS[r.kind].desc)||"", shielded: !!r._catShield, chilli: !!r._chilliBy })),
+      rats: p.rats.map(r => ({ id: r.id, kind: r.kind, name: r.name, w: r.w, heat: r.heat, col: r.col, cols: r.cols||null, prop: r.prop || r._muzzled || null, teeth: r.teeth || 0, muzzled: !!r._muzzled, diseased: !!r._dis, desc: (E.RATS[r.kind]&&E.RATS[r.kind].desc)||"", shielded: !!r._catShield, chilli: !!r._chilliBy })),
       armed: p.armed ? { cap: p.armed.cap, ready: p.armed.age >= 1, cols: (p.id === viewerId ? (p.armed.cols||null) : null) } : null,
       boardup: p.boardup, territorial: p.territorial,
       // Layer 3: cards sitting ON this kitchen, with who played them (for the layered display)
@@ -95,9 +100,9 @@ function project(g, viewerId, room) {
       if (!p || !p.alive || g.over) return [];
       if (g.players[g.active].id !== viewerId) return [];
       return A.legalActions(g, p).map(a => ({
-        type: a.type, id: a.id, label: a.label,
+        type: a.type, id: a.id, label: a.label, disabled: !!a.disabled,   // hint-only entries (e.g. inspection not ready) render as text, not buttons
         needsTarget: !!a.needsTarget, needsRat: !!a.needsRat, needsColour: a.needsColour || 0,
-        needsAlleyRat: !!a.needsAlleyRat,   // v4.1 fix: was never sent, so players could not choose an alley rat
+        needsAlleyRat: !!a.needsAlleyRat && !process.env.V5,   // long mode: no visible alley, the rat comes off the face-down rat deck   // v4.1 fix: was never sent, so players could not choose an alley rat
         targets: a.targets || [],
       }));
     })(),
@@ -373,7 +378,7 @@ io.on('connection', (socket) => {
   });
 });
 
-const VERSION = '4.1.2';
+const VERSION = 'L1.0';
 app.get('/version', (req, res) => res.json({ version: VERSION }));
 
 const PORT = process.env.PORT || 3000;
