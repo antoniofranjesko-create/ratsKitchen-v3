@@ -92,7 +92,9 @@ function project(g, viewerId, room) {
     youActed: (() => {
       const me = g.players.find(x => x.id === viewerId);
       if (!me) return null;
-      return { attack: !!me._actedAttack, build: !!me._actedBuild, playedRat: !!me._playedRat, stars: me.stars, hasArmed: !!me.armed };
+      return { attack: !!me._actedAttack, build: !!me._actedBuild, playedRat: !!me._playedRat, stars: me.stars, hasArmed: !!me.armed,
+        // long mode: what this turn's one choice has used so far
+        v5: me._v5 ? { att: !!me._v5.att, def: !!me._v5.def, drew: !!me._v5.drew } : null };
     })(),
     justDrew: (g.players[g.active] && g.players[g.active].id === viewerId) ? (g.justDrew || []) : [],
     yourActions: (() => {

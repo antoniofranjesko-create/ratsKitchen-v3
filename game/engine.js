@@ -42,7 +42,9 @@ const CARDS = {
   switch:      { name: 'Switcheroo',      cls: 'attack', desc: 'Swap one of your rats for a rival-s, regardless of weight.' },
   chilli:      { name: 'Hot Chilli',      cls: 'attack', desc: 'Place on a rival-s rat. It explodes at the start of your next turn — rat to the bins.' },
   hotratato:   { name: 'Ratata Quente',   cls: 'attack', desc: 'Dump any one of your rats into a rival kitchen — offload its heat onto them.' },
-  grease:      { name: 'Grease the Palm', cls: 'attack', desc: 'Discard a rival-s armed Scheduled inspection before it fires.' },
+  grease:      process.env.BLOCKSWAP
+    ? { name: 'Grease the Palm', cls: 'defence', desc: 'Reaction. When a rival inspects you, this cancels it. Plays automatically.' }
+    : { name: 'Grease the Palm', cls: 'attack', desc: 'Discard a rival-s armed Scheduled inspection before it fires.' },
   klepto:      { name: 'Kleptomaniac',    cls: 'attack', desc: 'Steal one card at random from any opponent-s hand.' },
   shakedown:   { name: 'Shakedown',       cls: 'attack', desc: 'Name a card. If that opponent holds it, they must give you one.' },
   territorial: { name: 'Territorial',     cls: 'control', desc: 'Place on a rival kitchen. Until your next turn it cannot receive rats; rats it would gain go to the bins.' },

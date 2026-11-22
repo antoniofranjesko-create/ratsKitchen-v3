@@ -342,6 +342,14 @@ button:disabled{opacity:.35;cursor:not-allowed}
 .mb-none{font-family:'Barlow Condensed';font-size:11px;letter-spacing:2px;text-transform:uppercase;color:var(--ash)}
 .mb-extra{display:flex;flex-direction:column;gap:3px;flex:0 1 auto;align-items:flex-end}
 .pip.crownpip{color:#fff;background:var(--danger);border-color:var(--danger)}
+/* long mode: this turn's checklist */
+.turnguide{display:flex;flex-wrap:wrap;gap:4px;align-items:center;margin:0 0 6px;font-family:'Barlow Condensed';font-size:12px;letter-spacing:.5px}
+.turnguide .tg{padding:2px 7px;border:1px solid var(--line);border-radius:10px;color:var(--bone-dim);white-space:nowrap}
+.turnguide .tg.done{color:var(--grease);background:var(--lamp);border-color:var(--lamp)}
+.turnguide .tg.open{color:var(--bone);border-color:var(--lamp)}
+.turnguide .tg.off{opacity:.4;text-decoration:line-through}
+.turnguide .or{color:var(--ash);font-size:11px}
+.turnguide .rulesbtn{margin-left:auto;padding:2px 8px;min-height:0;font-size:12px}
 .mybar .rat{width:32px;height:42px;border-radius:4px}
 .mybar .rat .band{height:4px}
 .mybar .rat .art{height:22px;font-size:16px}
@@ -539,6 +547,7 @@ button:disabled{opacity:.35;cursor:not-allowed}
   </div>
   <div class="dock">
     <div class="dock-h"><span class="lbl">Your hand</span><span class="prompt" id="dockPrompt"></span></div>
+    <div class="turnguide hidden" id="turnGuide"></div>
     <div class="mybar" id="myBar"></div>
     <div class="hand" id="hand"></div>
     <div class="actions" id="actions"></div>
@@ -719,7 +728,7 @@ function render(){
   const meP = STATE.players.find(p=>p.id===YOU);
   const fireReady = meActive && meP && meP.armed && meP.armed.ready;
   if(fireReady){
-    const cols=(meP.armed.cols||[]).map(c=>({red:'🔴',blue:'🔵',green:'🟢',yellow:'🟡'}[c]||c)).join('');
+    const cols=(meP.armed.cols||[]).map(c=>colDot(c)).join('');
     $('dockPrompt').innerHTML = `<span class="fireWarn">⚠ FIRE YOUR INSPECTION ${cols} NOW — it expires at end of this turn!</span>`;
   } else if(meActive && STATE.justDrew && STATE.justDrew.length){
     // Say WHERE the drawn card went — a rat goes to your kitchen and a Snap
@@ -732,8 +741,9 @@ function render(){
     }).join(', ');
     $('dockPrompt').innerHTML = `<span class="drewnote">↓ You drew: <b>${esc(drew)}</b></span>`;
   } else {
-    $('dockPrompt').textContent = STATE.over ? '' : (meActive ? (STATE.longMode ? 'Your turn — play up to 1 attack + 1 defence, or take a rat, or draw a card' : 'Your turn — play a card or act') : waitingMsg());
+    $('dockPrompt').textContent = STATE.over ? '' : (meActive ? (STATE.longMode ? 'Your turn — pick ONE: play cards, take a rat, or draw a card' : 'Your turn — play a card or act') : waitingMsg());
   }
+  renderTurnGuide(meActive);
   // a selected card explains itself (phone cards are too small for rules text)
   const selC = selectedCardId && meP && (meP.hand||[]).find(c=>c.id===selectedCardId);
   if(selC && !fireReady) $('dockPrompt').innerHTML = `<b>${esc(selC.name)}</b> — ${esc(selC.desc||'')}`;
@@ -869,7 +879,7 @@ function renderMyBar(){
   const extra=[];
   if(crown) extra.push('<span class="pip crownpip">Hold on — you win next turn</span>');
   if(p.armed){
-    const cols=(p.armed.cols||[]).map(c=>({red:'🔴',blue:'🔵',green:'🟢'}[c]||c)).join('');
+    const cols=(p.armed.cols||[]).map(c=>colDot(c)).join('');
     extra.push(`<span class="pip armed ${p.armed.ready?'ready':''}">⚑ ${p.armed.ready?'fire now':'arming'} ${cols}</span>`);
   }
   (p.kitchenCards||[]).forEach(kc=>extra.push(`<span class="pip terr" title="placed by ${esc(kc.by)}">${esc(kc.name)}</span>`));
@@ -882,6 +892,39 @@ function renderMyBar(){
 const NEST={red:'🔥',blue:'❄️',green:'🌾'}, NESTNAME={red:'Grill',blue:'Cold store',green:'Pantry'};
 // long mode: rewrite colour words in log lines as nest names
 function nestWords(l){const f=t=>typeof t==='string'?t.replace(/\bred\b/gi,'Grill').replace(/\bblue\b/gi,'Cold store').replace(/\bgreen\b/gi,'Pantry').replace(/colou?r/gi,'nest'):t;return typeof l==='string'?f(l):Object.assign({},l,{text:f(l.text)});}
+// long mode: always-visible turn checklist + a rules summary
+function renderTurnGuide(meActive){
+  const el=$('turnGuide'); if(!el) return;
+  if(!STATE.longMode||STATE.over){ el.classList.add('hidden'); return; }
+  el.classList.remove('hidden');
+  const u=(STATE.youActed&&STATE.youActed.v5)||{};
+  const played=u.att||u.def, drew=u.drew;
+  const chip=(txt,state)=>`<span class="tg ${state}">${txt}</span>`;
+  let h='';
+  if(meActive){
+    h+=chip('✓ Drew 1','done')+chip('✓ +1 Food','done')+'<span class="or">then ONE of:</span>';
+    h+=chip((u.att?'✓ ':'')+'Attack',u.att?'done':(drew?'off':'open'))+'<span class="or">+</span>'+chip((u.def?'✓ ':'')+'Defence',u.def?'done':(drew?'off':'open'));
+    h+='<span class="or">or</span>'+chip('Take a rat',drew?'done':(played?'off':'open'))+'<span class="or">or</span>'+chip('Draw a card',drew?'done':(played?'off':'open'));
+    h+='<span class="or">· free: fire, feed</span>';
+  } else h+='<span class="or">On your turn: draw 1, +1 Food, then one choice. Grease &amp; Wok react for you.</span>';
+  h+='<button class="ghost rulesbtn" id="btnRules">Rules</button>';
+  el.innerHTML=h;
+  $('btnRules').onclick=showRulesSummary;
+}
+function showRulesSummary(){
+  const wrap=document.createElement('div'); wrap.className='cardinfo';
+  wrap.innerHTML=`<div class="box" style="max-width:460px">
+    <div class="top" style="background:var(--lamp);color:var(--grease)">Long mode — your turn</div>
+    <h3>Every turn you MUST</h3><p>1. Draw 1 card (a Snap Inspection fires on you).<br>2. Take 1 Food.<br>3. Then make <b>ONE choice</b>:</p>
+    <p>• <b>Play cards</b> — up to <b>1 attack</b> and <b>1 defence</b><br>• or <b>Take a rat</b> from the rat deck<br>• or <b>Draw another card</b></p>
+    <h3>You MAY, for free</h3><p>• Fire an inspection you armed last turn<br>• Feed rats (each once a turn)<br>Healing (3 Food → 1 star) counts as your defence.</p>
+    <h3>Reactions</h3><p>Grease the Palm cancels an inspection on you; Wok Block cancels any other attack. Both play automatically.</p>
+    <h3>Win</h3><p>Start your turn with <b>${STATE.threshold} rat weight</b> (Rat King), or be the last stall standing.</p>
+    <p style="color:var(--ash)">Defence cards: Food heal, Last Resort, Board Up, Cat, Gambit, Special Delivery to your own kitchen. Everything else is an attack.</p>
+    <div class="foot"><button data-close="1">Close</button></div></div>`;
+  wrap.onclick=e=>{ if(e.target===wrap||e.target.dataset.close) wrap.remove(); };
+  document.body.appendChild(wrap);
+}
 function colDot(c){if(STATE&&STATE.longMode)return NEST[c]||'⚪';const m={red:'🔴',blue:'🔵',green:'🟢',yellow:'🟡'};return m[c]||'⚪'}
 function ratHTML(r){
   const col=r.col||'none';const cls=['rat',col];
@@ -909,9 +952,20 @@ function ratHTML(r){
 function shortName(n){return n.replace(/ Rat$/,'').replace(/^The /,'')}
 const ATTACK_CARDS=['poach','switch','chilli','hotratato','territorial','klepto','shakedown','mole','sched1','sched2'];
 const BUILD_CARDS=['food','delivery','recycle','rattrap','exterm','inherit','gambit'];
+// long mode: which kind of play each card is (Special Delivery depends on where the rat goes)
+const LM_DEF=['food','lastresort','boardup','cat','gambit','delivery'], LM_REACT=['grease','wok'];
 function whyUnplayable(card){
   const a=STATE.youActed||{};
   const k=card.card;
+  if(STATE.longMode){
+    const u=a.v5||{};
+    if(k==='grease') return 'Reaction — cancels an inspection aimed at you, automatically';
+    if(k==='wok') return 'Reaction — cancels any other attack aimed at you, automatically';
+    if(u.drew) return 'you took a rat or drew a card this turn — no cards can be played';
+    const isDef=LM_DEF.includes(k);
+    if(isDef && u.def) return 'you\'ve already played your defence this turn';
+    if(!isDef && u.att) return 'you\'ve already played your attack this turn';
+  }
   // NOTE: unlimited card play — there is no one-attack/one-build-per-turn limit.
   // Reasons below reflect real legality (zone-once, targets, resources) only.
   if(k==='food') return (a.stars>=3) ? 'full stars — nothing to heal' : 'no rat to eat and stars are full';
