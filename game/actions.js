@@ -341,7 +341,7 @@ function legalActions(g, p) {
     if (t === 'territorial' && true) { const tg=freeZones(opps); if(tg.length) push({ id: c.id, type: t, needsTarget: true, targets: tg.map(o => o.id), label: 'Territorial' }); }
     if (t === 'hotratato' && true && p.rats.length) { const tg=freeZones(opps); if(tg.length) push({ id: c.id, type: t, needsTarget: true, needsRat: true, targets: tg.map(o => o.id), label: 'Ratata Quente (dump a rat)' }); }
     // ---- grease an armed rival ----
-    if (t === 'grease' && true) {
+    if (t === 'grease' && !process.env.BLOCKSWAP) {
       const armed = opps.filter(o => o.armed);
       if (armed.length) push({ id: c.id, type: t, needsTarget: true, targets: armed.map(o => o.id), label: 'Grease the Palm' });
     }
@@ -491,7 +491,23 @@ function kind3Check(g) {
     }
   }
 }
+const WOKABLE = { poach: 1, chilli: 1, hotratato: 1, play_ratato: 1, muzzle: 1, disease: 1, fight: 1, klepto: 1, territorial: 1, inherit: 1, delivery: 1 };
 function apply(g, p, act, targetId, ratId) {
+  // BLOCKSWAP: Wok Block cancels any non-inspection attack aimed at its holder
+  if (process.env.BLOCKSWAP && WOKABLE[act.type] && targetId && targetId !== p.id && act.id) {
+    const t = g.players.find(x => x.id === targetId);
+    const wi = t ? t.hand.findIndex(c => c.card === 'wok') : -1;
+    if (wi >= 0) {
+      const ci = p.hand.findIndex(c => c.id === act.id);
+      if (ci >= 0) g.discard.push(p.hand.splice(ci, 1)[0]);
+      g.discard.push(t.hand.splice(wi, 1)[0]);
+      if (process.env.V5) { const c5 = v5cat(p, act, targetId); if (c5 !== 'free') { p._v5.total++; p._v5[c5] = true; } }
+      if (!p._hitZones) p._hitZones = {}; p._hitZones[t.id] = true;
+      if (global.__v5) global.__v5.wok = (global.__v5.wok || 0) + 1;
+      E.logAdd(g, `${t.name} wok-blocks ${p.name}'s ${act.type}.`);
+      return;
+    }
+  }
   const res = apply0(g, p, act, targetId, ratId);
   kind3Check(g);
   return res;

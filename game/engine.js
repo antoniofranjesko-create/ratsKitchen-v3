@@ -46,7 +46,7 @@ const CARDS = {
   klepto:      { name: 'Kleptomaniac',    cls: 'attack', desc: 'Steal one card at random from any opponent-s hand.' },
   shakedown:   { name: 'Shakedown',       cls: 'attack', desc: 'Name a card. If that opponent holds it, they must give you one.' },
   territorial: { name: 'Territorial',     cls: 'control', desc: 'Place on a rival kitchen. Until your next turn it cannot receive rats; rats it would gain go to the bins.' },
-  wok:         { name: 'Wok Block',       cls: 'defence', desc: 'Reactive. Cancel one inspection aimed at you.' },
+  wok:         { name: 'Wok Block',       cls: 'defence', desc: process.env.BLOCKSWAP ? 'Reactive. Cancel one attack aimed at you that is not an inspection.' : 'Reactive. Cancel one inspection aimed at you.' },
   boardup:     { name: 'Board Up',        cls: 'defence', desc: 'Your kitchen cannot be attacked for one turn.' },
   food:        { name: 'Food',            cls: 'buff', desc: 'Spend 2 Food to regain 1 star. Or spend 1 to feed a rat.' },
   cat:         { name: 'Cat',             cls: 'buff', desc: 'Play on one of your rats (not Fat) to shield it — blocks the next single attack on that rat.' },
@@ -482,7 +482,8 @@ function fireScheduled(g, owner, t, cols) {
   }
 }
 function tryWok(g, t) {
-  const i = t.hand.findIndex(c => c.card === 'wok');
+  // 22 Nov swap (BLOCKSWAP): Grease the Palm is the inspection block; Wok Block blocks every other attack
+  const i = t.hand.findIndex(c => c.card === (process.env.BLOCKSWAP ? 'grease' : 'wok'));
   if (i >= 0) { g.discard.push(t.hand.splice(i, 1)[0]); return true; }
   return false;
 }
