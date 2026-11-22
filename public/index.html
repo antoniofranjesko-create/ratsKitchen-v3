@@ -920,7 +920,7 @@ function showRulesSummary(){
     <h3>You MAY, for free</h3><p>• Fire an inspection you armed last turn<br>• Feed rats (each once a turn)<br>Healing (3 Food → 1 star) counts as your defence.</p>
     <h3>Reactions</h3><p>Grease the Palm cancels an inspection on you; Wok Block cancels any other attack. Both play automatically.</p>
     <h3>Win</h3><p>Start your turn with <b>${STATE.threshold} rat weight</b> (Rat King), or be the last stall standing.</p>
-    <p style="color:var(--ash)">Defence cards: Food heal, Last Resort, Board Up, Cat, Gambit, Special Delivery to your own kitchen. Everything else is an attack.</p>
+    <p style="color:var(--ash)">Defence cards: Food heal, Last Resort, Board Up, Cat, Special Delivery to your own kitchen. Everything else is an attack.</p>
     <div class="foot"><button data-close="1">Close</button></div></div>`;
   wrap.onclick=e=>{ if(e.target===wrap||e.target.dataset.close) wrap.remove(); };
   document.body.appendChild(wrap);
