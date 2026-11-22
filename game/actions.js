@@ -319,6 +319,12 @@ function legalActions(g, p) {
       const vics = freeZones(opps).filter(o => o.rats.some(r => r.prop !== 'no_explode' && !r._chilliBy));
       if (vics.length) push({ id: c.id, type: t, needsTarget: true, needsRat: 'target', targets: vics.map(o => o.id), label: 'Hot Chilli (place on a rat)' });
     }
+    // ---- Muzzle / Disease (test): tuck under a rival's rat; Spice can't be debuffed ----
+    if ((t === 'muzzle' || t === 'disease') && process.env.NERFS) {
+      const ok = r => r.prop !== 'no_explode' && (t === 'muzzle' ? (r.prop && !r._muzzled) : (r._dis || 0) < 1);
+      const vics = freeZones(opps).filter(o => o.rats.some(ok));
+      if (vics.length) push({ id: c.id, type: t, needsTarget: true, needsRat: 'target', targets: vics.map(o => o.id), label: t === 'muzzle' ? 'Muzzle (rat loses its ability)' : 'Disease (+1 heat)' });
+    }
     // ---- territorial: place on a rival kitchen ----
     if (t === 'territorial' && true) { const tg=freeZones(opps); if(tg.length) push({ id: c.id, type: t, needsTarget: true, targets: tg.map(o => o.id), label: 'Territorial' }); }
     if (t === 'hotratato' && true && p.rats.length) { const tg=freeZones(opps); if(tg.length) push({ id: c.id, type: t, needsTarget: true, needsRat: true, targets: tg.map(o => o.id), label: 'Ratata Quente (dump a rat)' }); }
@@ -618,6 +624,15 @@ function apply0(g, p, act, targetId, ratId) {
       if (r) { r._chilliBy = p.id; E.logAdd(g, `${p.name} plants a Hot Chilli on ${t.name}'s ${r.name} — it blows next turn.`); }
       p._actedAttack = true; break;
     }
+    case 'muzzle': case 'disease': {
+      bin(takeCard(act.id));
+      const ok = r => r.prop !== 'no_explode' && (act.type === 'muzzle' ? (r.prop && !r._muzzled) : (r._dis || 0) < 1);
+      const r = (ratId && t.rats.find(x => x.id === ratId && ok(x))) || t.rats.find(ok);
+      if (r && act.type === 'muzzle') { r._muzzled = r.prop; r.prop = null; E.logAdd(g, `${p.name} muzzles ${t.name}'s ${r.name}.`); }
+      if (r && act.type === 'disease') { r._dis = 1; r.heat += 1; E.logAdd(g, `${p.name} infects ${t.name}'s ${r.name} — heat ${r.heat}.`); }
+      if (global.__v5) global.__v5[act.type] = (global.__v5[act.type] || 0) + 1;
+      p._actedAttack = true; break;
+    }
     case 'territorial': { bin(takeCard(act.id)); t.territorial = 1; t._terrBy = p.id; p._actedAttack = true; E.logAdd(g, `${p.name} marks ${t.name}'s kitchen Territorial.`); break; }
     case 'grease': { bin(takeCard(act.id)); t.armed = null; p._actedAttack = true; E.logAdd(g, `${p.name} greases ${t.name}'s inspector.`); break; }
     case 'cat': {
@@ -819,6 +834,7 @@ function botTurn(g) {
 }
 
 // ── V5 bot: free actions, then urgent plays, then build-vs-act decision ──────
+const ABILS = ['no_steal', 'no_move', 'alpha_feed', 'breed', 'scavenge', 'feed_grow', 'tax'];
 function botTurnV5(g, p) {
   const RATP = (p.seat === 0 && process.env.B0) ? +process.env.B0 : +(process.env.BOTRAT ?? 0.5);
   let guard = 0;
@@ -847,6 +863,21 @@ function botTurnV5(g, p) {
       const u = p._v5, m = process.env.V5TURN || 'one';
       const drawOpen = has('v5rat') || has('v5card');
       const want = E.weight(p) < THRESHOLD + 1;
+      // nerfs (test): disease a leader's rat in a colour we can inspect; muzzle a leader's ability rat
+      if (process.env.NERFS && lead && u.total === 0) {
+        const myCols = []; if (p.armed) myCols.push(...(p.armed.cols || []));
+        p.hand.forEach(c => { if (c.card === 'sched1' || c.card === 'sched2') myCols.push(...(c.cols || [])); });
+        const d = has('disease'), mz = has('muzzle');
+        const dr = lead.rats.find(r => r.prop !== 'no_explode' && !r._dis && myCols.includes(r.col));
+        const mr = lead.rats.find(r => ABILS.includes(r.prop));
+        if (d && d.targets.includes(lead.id) && dr) { choice = d; choice._pick = dr.id; }
+        else if (mz && mz.targets.includes(lead.id) && mr) { choice = mz; choice._pick = mr.id; }
+      }
+    }
+    if (!choice) {
+      const u = p._v5, m = process.env.V5TURN || 'one';
+      const drawOpen = has('v5rat') || has('v5card');
+      const want = E.weight(p) < THRESHOLD + 1;
       // what would we play? (botChoose without the draw options)
       const plays = acts.filter(a => !['v5rat', 'v5card'].includes(a.type));
       let best = botChoose(g, p, plays);
@@ -867,7 +898,8 @@ function botTurnV5(g, p) {
     if (choice.type === 'delivery') target = choice.targets.includes(p.id) ? p.id : (lead && choice.targets.includes(lead.id) ? null : null);
     if (choice.type === 'delivery' && !target) { break; }
     if (choice.needsRat) {
-      if (choice.type === 'exterm') {
+      if (choice._pick) { ratId = choice._pick; target = lead.id; }
+      else if (choice.type === 'exterm') {
         const kitchen = target ? g.players.find(x => x.id === target) : p;
         const r = kitchen && kitchen.rats.slice().sort((a, b) => (kitchen.id===p.id ? b.heat-a.heat : b.w-a.w))[0];
         ratId = r && r.id;

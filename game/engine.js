@@ -61,6 +61,8 @@ const CARDS = {
   wd_snap2:    { name: 'Snap Inspection',  sub: 'Two Colour', cls: 'drawn', desc: 'WHEN DRAWN, reveal at once — it fires on YOU. Has two fixed colours: you lose 1 star per rat you hold of EITHER. Harder to dodge than the one-colour version. Cannot be held or played.' },
   wd_mole:     { name: 'Snap Inspection',  sub: 'Naked Mole Rat', cls: 'drawn', desc: 'WHEN DRAWN, reveal at once — it fires on YOU. The mole is blind to colour: a flat -1 star, no matter what you hold. Cannot be held or played.' },
   desperate:   { name: 'Dodgy Inspector', cls: 'engine', desc: 'He docks your rating — lose 1 star — but he is on the take, and looks the other way while you help yourself to any rat from the alley.' },
+  muzzle:      { name: 'Muzzle',          cls: 'nerf', desc: 'Tuck under a rival-s rat: it loses its ability while the Muzzle stays.' },
+  disease:     { name: 'Disease',         cls: 'nerf', desc: 'Tuck under a rival-s rat: +1 heat.' },
   feast:       { name: 'Feast',           cls: 'buff', desc: 'Counts as 2 Food.' },
   gambit:      { name: 'Gambit',          cls: 'engine', desc: 'Look at the top 3 cards of the deck. Keep 1; put the other 2 back on top (you know what they are).' },
 };
@@ -130,7 +132,9 @@ function deckConfig(P) {
   if (process.env.V5) {
     // V5 TEST: all rats live in the rat deck (the bins). Market deck = everything else.
     actions.desperate = 0;
-    actions.inherit = +(process.env.INHN ?? 3);   // Inheritance back x3 (take 2 cards) — locked 21 Nov
+    actions.inherit = +(process.env.INHN ?? 3);
+    actions.muzzle = process.env.NERFS ? +(process.env.MUZN ?? 3) : 0;
+    actions.disease = process.env.NERFS ? +(process.env.DISN ?? 4) : 0;   // Inheritance back x3 (take 2 cards) — locked 21 Nov
     actions.feast = +(process.env.FEAST ?? 4);
     if (process.env.NOFOODCARDS) { actions.food = 0; actions.feast = 0; }
     Object.assign(ratMaster, { plain: +(process.env.STREET ?? 4), fat: +(process.env.FATN ?? 6), runner: 3, sow: 3, toll: 3, feral: +(process.env.IMM ?? 3), spice: +(process.env.IMM ?? 3),
@@ -425,7 +429,9 @@ function refillAlley(g) {
     else for (let i = g.bins.length - 1; i >= 0; i--) { if (g.bins[i].rat) { idx = i; break; } }
     if (idx < 0) break;                       // bins exhausted
     const got = g.bins.splice(idx, 1)[0];
-    if (got.rat && got.rat.kind === 'hog') got.rat.w = 1;   // fed food is discarded when a Hog leaves play
+    if (got.rat && got.rat.kind === 'hog') got.rat.w = 1;
+    if (got.rat && got.rat._muzzled) { got.rat.prop = got.rat._muzzled; got.rat._muzzled = null; }   // tucked nerfs are discarded when a rat leaves play
+    if (got.rat && got.rat._dis) { got.rat.heat -= got.rat._dis; got.rat._dis = 0; }   // fed food is discarded when a Hog leaves play
     g.alley.push(got);
   }
 }
