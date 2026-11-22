@@ -1,7 +1,7 @@
 // ── LONG MODE (branch long-mode): this server runs long mode v1 by default ──
 // Any of these can still be overridden with an environment variable.
-const LONG_DEFAULTS = { V5: '1', V5TURN: 'ad', IMM: '2', FOODINC: 'A', NOFOODCARDS: '1', HEALCOST: '3', THRESH: '10',
-  STARSBYP: '6,5,4,3', KIND3: '1', FOODCARD: '1', FOODSTART: '0', SHEET: '1', NERFS: '1', FIGHT: '1', FIGHTCH: '1', FIGHTN: '2', CUT: 'exterm,gambit', BLOCKSWAP: '1', CATFAT: '1', TARGETTIMING: '1' };
+const LONG_DEFAULTS = { V5: '1', V5TURN: 'cat3', IMM: '2', FOODINC: 'NONE', NOFOODCARDS: '1', HEALCOST: '3', THRESH: '10',
+  STARSBYP: '7,6,5,4', KIND3: '1', FOODCARD: '1', FOODSTART: '2', FOODOPT: '1', PLAYCAP: '2', SHEET: '1', NERFS: '1', FIGHT: '1', FIGHTCH: '1', FIGHTN: '2', CUT: 'exterm,gambit', BLOCKSWAP: '1', CATFAT: '1', TARGETTIMING: '1' };
 for (const [k, v] of Object.entries(LONG_DEFAULTS)) if (process.env[k] === undefined) process.env[k] = v;
 // RAT'S KITCHEN v3 — SERVER
 'use strict';
@@ -32,10 +32,15 @@ function lobbyPlayers(room) {
 }
 function emitRoom(room) {
   for (const pl of room.players) {
-    if (pl.socket) pl.socket.emit('room', { code: room.code, you: pl.id, stepMode: !!room.stepMode, players: lobbyPlayers(room) });
+    if (pl.socket) pl.socket.emit('room', { code: room.code, you: pl.id, stepMode: !!room.stepMode, playCap: room.playCap || +(process.env.PLAYCAP || 2), players: lobbyPlayers(room) });
   }
 }
 
+function setCap(room) {
+  const n = room.playCap || +(process.env.PLAYCAP || 2);
+  room.game.playCap = n;
+  for (const p of room.game.players) p._playCap = n;
+}
 function code() { return Math.random().toString(36).slice(2, 6).toUpperCase(); }
 
 // project the game state for one viewer (their hand private, others' counts only)
@@ -43,7 +48,7 @@ function project(g, viewerId, room) {
   const seat = id => room && room.players.find(x => x.id === id);
   return {
     over: g.over, winner: g.winner, active: g.players[g.active] && g.players[g.active].id,
-    turn: g.turn, threshold: E.THRESHOLD, maxStars: E.STARS, longMode: !!process.env.V5, foodCards: !!process.env.FOODCARD, closedCards: (g.closed || []).length, anyElim: g._firstElimTurn != null, log: g.log.slice(-40),
+    turn: g.turn, threshold: E.THRESHOLD, maxStars: E.STARS, longMode: !!process.env.V5, foodCards: !!process.env.FOODCARD, playCap: g.playCap || 2, closedCards: (g.closed || []).length, anyElim: g._firstElimTurn != null, log: g.log.slice(-40),
     lastPlayed: g.lastPlayed || null,
     awaitingStep: (() => {
       // a step is available when the game isn't over, it's a bot's turn coming up,
@@ -94,7 +99,7 @@ function project(g, viewerId, room) {
       if (!me) return null;
       return { attack: !!me._actedAttack, build: !!me._actedBuild, playedRat: !!me._playedRat, stars: me.stars, hasArmed: !!me.armed,
         // long mode: what this turn's one choice has used so far
-        v5: me._v5 ? { att: !!me._v5.att, def: !!me._v5.def, drew: !!me._v5.drew } : null };
+        v5: me._v5 ? { att: !!me._v5.att, def: !!me._v5.def, nb: !!me._v5.nb, total: me._v5.total || 0, drew: !!me._v5.drew } : null };
     })(),
     justDrew: (g.players[g.active] && g.players[g.active].id === viewerId) ? (g.justDrew || []) : [],
     yourActions: (() => {
@@ -291,8 +296,16 @@ io.on('connection', (socket) => {
     room.started = true;
     clearTimeout(room.botTimer); room.botTimer = null;
     room.game = E.newGame(room.players.map(p => ({ id: p.id, name: p.name, bot: p.bot })));
+    setCap(room);
     io.to(myRoom).emit('begin', {});
     runBots(room);
+  });
+
+  // long mode: cards per turn is a table setting (1-3), chosen in the lobby
+  socket.on('setCap', ({ n } = {}) => {
+    const room = rooms[myRoom]; if (!room || room.started) return;
+    n = +n; if (![1, 2, 3].includes(n)) return;
+    room.playCap = n; emitRoom(room);
   });
 
   socket.on('restart', () => {
@@ -300,6 +313,7 @@ io.on('connection', (socket) => {
     // rebuild a fresh game with the same seated players
     clearTimeout(room.botTimer); room.botTimer = null;
     room.game = E.newGame(room.players.map(p => ({ id: p.id, name: p.name, bot: p.bot })));
+    setCap(room);
     io.to(myRoom).emit('begin', {});
     runBots(room);
   });
@@ -380,7 +394,7 @@ io.on('connection', (socket) => {
   });
 });
 
-const VERSION = 'L1.1';
+const VERSION = 'L1.2';
 app.get('/version', (req, res) => res.json({ version: VERSION }));
 
 const PORT = process.env.PORT || 3000;

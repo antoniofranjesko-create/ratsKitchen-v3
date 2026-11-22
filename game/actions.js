@@ -273,8 +273,16 @@ const V5FREE = { fire: 1, feed: 1, breed: 1, end: 1, fire_wait: 1, fire_blocked:
 const V5DEF = { food_heal: 1, eat_lastresort: 1, boardup: 1, cat: 1, gambit: 1, copycat: 1 };
 // ARMDEF: arming an inspection names no rival yet, so it counts as a card on yourself
 if (process.env.ARMDEF) { V5DEF.sched1 = 1; V5DEF.sched2 = 1; }
+// cat3 (22 Nov): three printed card types; a turn plays up to N cards (room setting), each of a different type
+const CAT3 = {
+  att: ['mole', 'sched1', 'sched2', 'poach', 'fight', 'klepto', 'hotratato', 'play_ratato'],
+  def: ['boardup', 'eat_lastresort', 'food_heal'],
+  nb:  ['cat', 'muzzle', 'disease', 'chilli', 'territorial', 'inherit', 'delivery'],
+};
+function cat3Of(type) { for (const k in CAT3) if (CAT3[k].includes(type)) return k; return 'att'; }
 function v5cat(p, act, targetId) {
   if (V5FREE[act.type]) return 'free';
+  if ((process.env.V5TURN || 'one') === 'cat3') return cat3Of(act.type);
   if (act.type === 'delivery' || act.type === 'exterm') return (targetId ? targetId === p.id : (act.targets||[]).includes(p.id)) ? 'def' : 'att';
   return V5DEF[act.type] ? 'def' : 'att';
 }
@@ -285,6 +293,7 @@ function v5ok(p, cat) {
   if (u.drew) return false;
   if (m === 'one') return u.total < 1;
   if (m === 'two') return u.total < 2;   // 22 Nov: any 2 cards, no attack/defence split
+  if (m === 'cat3') return u.total < (p._playCap || +(process.env.PLAYCAP || 2)) && !u[cat];
   return !u[cat];   // ad
 }
 
@@ -298,7 +307,7 @@ function legalActions(g, p) {
   const noArm = g.market && g.market.event === 'day_off';   // Inspector's Day Off
 
   if (!capped) for (const c of p.hand) {
-    if (process.env.V5 && !v5ok(p, 'att') && !v5ok(p, 'def')) break;
+    if (process.env.V5 && !v5ok(p, 'att') && !v5ok(p, 'def') && !v5ok(p, 'nb')) break;
     const t = c.card;
     // ---- Ratato Rat held in hand → play into a rival kitchen (attack) ----
     if (c.ratcard && c.ratcard.kind === 'hotrat' && true && !p._playedRat) {
@@ -473,7 +482,7 @@ function legalActions(g, p) {
     for (let i = acts.length - 1; i >= 0; i--) if (!v5ok(p, v5cat(p, acts[i]))) {
       // delivery/exterm: keep if either side of its targets is allowed
       const a = acts[i];
-      if ((a.type === 'delivery' || a.type === 'exterm') && (v5ok(p, 'att') || v5ok(p, 'def'))) {
+      if ((a.type === 'delivery' || a.type === 'exterm') && process.env.V5TURN !== 'cat3' && (v5ok(p, 'att') || v5ok(p, 'def'))) {
         a.targets = a.targets.filter(id => v5ok(p, id === p.id ? 'def' : 'att'));
         if (a.targets.length) continue;
       }
@@ -694,6 +703,7 @@ function apply0(g, p, act, targetId, ratId) {
       bin(takeCard(act.id));
       const ok = r => r.prop !== 'no_explode' && (act.type === 'muzzle' ? (r.prop && !r._muzzled) : (r._dis || 0) < 1);
       const r = (ratId && t.rats.find(x => x.id === ratId && ok(x))) || t.rats.find(ok);
+      if (r && E.tryCat(g, t, r)) { E.logAdd(g, `${t.name}'s Cat shields the ${r.name}.`); p._actedAttack = true; break; }   // Cat blocks anything aimed at its rat
       if (r && act.type === 'muzzle') { r._muzzled = r.prop; r.prop = null; E.logAdd(g, `${p.name} muzzles ${t.name}'s ${r.name}.`); }
       if (r && act.type === 'disease') { r._dis = 1; r.heat += 1; E.logAdd(g, `${p.name} infects ${t.name}'s ${r.name} — heat ${r.heat}.`); }
       if (global.__v5) global.__v5[act.type] = (global.__v5[act.type] || 0) + 1;

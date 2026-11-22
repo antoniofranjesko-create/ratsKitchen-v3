@@ -472,14 +472,18 @@ function fireMole(g, owner, t) {
   if (tryWok(g, t)) { logAdd(g, `${t.name} wok-blocks the inspection.`); return; }
   damage(g, t, 1);
   logAdd(g, `Naked Mole Rat inspects ${t.name}: -1 star.`);
+  tollPay(g, owner, t);
 }
 function fireScheduled(g, owner, t, cols) {
   if (tryWok(g, t)) { logAdd(g, `${t.name} wok-blocks the inspection.`); return; }
   const d = heatOf(t, cols);
   damage(g, t, d);
   logAdd(g, `Scheduled inspection hits ${t.name} for ${d} (${cols.join('/')}).`);
-  // Toll Rat: inspector gives target a card
-  if (t.alive && t.rats.some(r => r.prop === 'tax') && owner.hand.length) {
+  tollPay(g, owner, t);
+}
+// Toll Rat: a RIVAL who inspects you gives you a card (not a Snap you draw yourself)
+function tollPay(g, owner, t) {
+  if (owner && owner !== t && t.alive && t.rats.some(r => r.prop === 'tax') && owner.hand.length) {
     const c = owner.hand.shift();
     t.hand.push(c);
     logAdd(g, `Toll Rat: ${owner.name} pays ${t.name} a card.`);
