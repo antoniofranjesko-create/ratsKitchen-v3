@@ -16,7 +16,8 @@ const HAND = 7;
 const RATS = {
   plain:  { name: 'Street Rat', w: 1, heat: 1, prop: null,          col: true,  desc: 'Plain stock. A small inspection risk.' },
   runner: { name: 'Runner Rat', w: 1, heat: 1, prop: 'feed_draw',   col: true,  desc: 'FEED 1 Food: draw a card. Once per turn.' },
-  fat:    { name: 'Fat Rat',    w: 2, heat: 2, prop: 'no_cat',      col: true,  desc: 'Heavy stock — weight 2. Cannot be shielded by a Cat.' },
+  fat:    process.env.CATFAT ? { name: 'Fat Rat', w: 2, heat: 2, prop: null, col: true, desc: 'Heavy stock — weight 2.' }
+        : { name: 'Fat Rat',    w: 2, heat: 2, prop: 'no_cat',      col: true,  desc: 'Heavy stock — weight 2. Cannot be shielded by a Cat.' },
   sow:    { name: 'Sow Rat',    w: 2, heat: 2, prop: 'feed_draw2',  col: true,  desc: 'FEED 1 Food: draw 2 cards. Once per turn.' },
   alpha:  { name: 'Alpha Rat',  w: 2, heat: 2, prop: 'alpha_guard', col: true,  desc: 'While Alpha is in your kitchen, none of your rats can be Poached. Cannot be Cat-shielded.' },
   sewer:  { name: 'Sewer Rat',  w: 1, heat: 0, prop: null,          col: false, desc: 'Colourless and heat 0 — invisible to inspection.' },
@@ -40,14 +41,14 @@ const CARDS = {
   sched2:      { name: 'Health Inspection', sub: process.env.V5 ? 'Scheduled — 2 Nest' : 'Scheduled — 2 Colour', cls: 'attack', desc: process.env.V5 ? 'Names two nests. Arm it, then on your next turn fire at a rival — pick one of its nests; damage = their heat there.' : 'Has two fixed colours. Arm it, then on a later turn fire at a rival — damage = their heat in those two colours. Whiffs if they hold neither.' },
   poach:       { name: 'Poach',           cls: 'attack', desc: 'Steal one weight-1 rat from a rival. You choose which.' },
   switch:      { name: 'Switcheroo',      cls: 'attack', desc: 'Swap one of your rats for a rival-s, regardless of weight.' },
-  chilli:      { name: 'Hot Chilli',      cls: 'attack', desc: 'Place on a rival-s rat. It explodes at the start of your next turn — rat to the bins.' },
+  chilli:      { name: 'Hot Chilli',      cls: 'attack', desc: process.env.TARGETTIMING ? 'Place on a rival-s rat. At the start of that player-s next turn it goes off: the rat goes back into the rat deck.' : 'Place on a rival-s rat. It explodes at the start of your next turn — rat to the bins.' },
   hotratato:   { name: 'Ratata Quente',   cls: 'attack', desc: 'Dump any one of your rats into a rival kitchen — offload its heat onto them.' },
   grease:      process.env.BLOCKSWAP
     ? { name: 'Grease the Palm', cls: 'defence', desc: 'Reaction. When a rival inspects you, this cancels it. Plays automatically.' }
     : { name: 'Grease the Palm', cls: 'attack', desc: 'Discard a rival-s armed Scheduled inspection before it fires.' },
   klepto:      { name: 'Kleptomaniac',    cls: 'attack', desc: 'Steal one card at random from any opponent-s hand.' },
   shakedown:   { name: 'Shakedown',       cls: 'attack', desc: 'Name a card. If that opponent holds it, they must give you one.' },
-  territorial: { name: 'Territorial',     cls: 'control', desc: 'Place on a rival kitchen. Until your next turn it cannot receive rats; rats it would gain go to the bins.' },
+  territorial: { name: 'Territorial',     cls: 'control', desc: process.env.TARGETTIMING ? 'Place on a rival kitchen. It cannot receive rats until the end of that player-s next turn; they discard it then.' : 'Place on a rival kitchen. Until your next turn it cannot receive rats; rats it would gain go to the bins.' },
   wok:         { name: 'Wok Block',       cls: 'defence', desc: process.env.BLOCKSWAP ? 'Reactive. Cancel one attack aimed at you that is not an inspection.' : 'Reactive. Cancel one inspection aimed at you.' },
   boardup:     { name: 'Board Up',        cls: 'defence', desc: 'Your kitchen cannot be attacked for one turn.' },
   food:        { name: 'Food',            cls: 'buff', desc: 'Spend 2 Food to regain 1 star. Or spend 1 to feed a rat.' },
@@ -530,6 +531,10 @@ function eliminate(g, t) {
   t.hand = [];
   t.armed = null;
   logAdd(g, `${t.name} is shut down!`);
+  // Last stall standing is decided the moment the second-last stall closes, so a
+  // shared Market Day or a Snap can never knock out everyone at once (no-winner games).
+  const left = g.players.filter(x => x.alive);
+  if (left.length === 1 && !g.over) { g.over = true; g.winner = left[0].id; logAdd(g, `${left[0].name} is the last stall standing!`); }
 }
 
 // Alpha is a defensive rat only — no win condition. While it's in a kitchen,

@@ -13,6 +13,8 @@ function startTurn(g) {
   if ((g._roundCounter || 0) <= 0) {
     flipMarketDay(g);
     g._roundCounter = g.players.filter(pp => pp.alive).length;
+    // test lever ROUNDCARD: at the start of each round everyone draws 1 market card
+    if (process.env.ROUNDCARD && !g.over) for (const q of g.players) if (q.alive) { const c = E.drawCard(g); if (c) resolveDraw(g, q, c, false); if (g.over) return; }
     if (g.over) return;   // a market effect ended the game
   }
   g._roundCounter--;
@@ -45,11 +47,13 @@ function startTurn(g) {
   for (const q of g.players) {
     if (!q.alive) continue;
     q.rats = q.rats.filter(r => {
-      if (r._chilliBy === p.id) { g.bins.push({ id: r.id, rat: r }); E.logAdd(g, `A Hot Chilli detonates — ${q.name} loses a ${r.name} to the bins.`); return false; }
+      // TARGETTIMING: a Hot Chilli goes off at the start of the TARGET's next turn (they resolve and discard it)
+      const boom = process.env.TARGETTIMING ? (q === p && r._chilliBy) : (r._chilliBy === p.id);
+      if (boom) { g.bins.push({ id: r.id, rat: r }); E.logAdd(g, `A Hot Chilli detonates — ${q.name} loses a ${r.name} to the bins.`); return false; }
       return true;
     });
     // Territorial placed by you expires at your next turn
-    if (q._terrBy === p.id) { q._terrBy = null; q.territorial = 0; }
+    if (q._terrBy === p.id && !process.env.TARGETTIMING) { q._terrBy = null; q.territorial = 0; }
     // Rat Trap you set expires unsprung at your next turn (1-turn card)
     if (q._rattrap === p.id) { q._rattrap = null; E.logAdd(g, `${p.name}'s Rat Trap in ${q.name}'s kitchen goes unsprung.`); }
     // Pelican Delivery you placed lands now: top bin rat drops into that kitchen
@@ -265,7 +269,7 @@ function payFood(g, p, n) {
 //   V5TURN=one  : play 1 card | take a rat | draw a card
 //   V5TURN=ad   : play 1 attack and/or 1 defence | take a rat | draw a card
 //   V5TURN=plus : play 1 card AND then take a rat or draw a card
-const V5FREE = { fire: 1, feed: 1, breed: 1, end: 1, fire_wait: 1, fire_blocked: 1, v5rat: 1, v5card: 1 };
+const V5FREE = { fire: 1, feed: 1, breed: 1, end: 1, fire_wait: 1, fire_blocked: 1, v5rat: 1, v5card: 1, v5food: 1 };
 const V5DEF = { food_heal: 1, eat_lastresort: 1, boardup: 1, cat: 1, gambit: 1, copycat: 1 };
 function v5cat(p, act, targetId) {
   if (V5FREE[act.type]) return 'free';
@@ -357,7 +361,7 @@ function legalActions(g, p) {
     }
     // ---- cat: buff on your own rat (not fat/alpha) ----
     if (t === 'cat' && true) {
-      const shieldable = p.rats.filter(r => r.kind !== 'fat' && r.kind !== 'alpha' && !r._catShield);
+      const shieldable = p.rats.filter(r => (process.env.CATFAT || r.kind !== 'fat') && r.kind !== 'alpha' && !r._catShield);
       if (shieldable.length) push({ id: c.id, type: 'cat', needsRat: true, label: 'Cat — shield a rat' });
     }
     // ---- board up ----
@@ -462,6 +466,7 @@ function legalActions(g, p) {
     const canDraw = !u.drew && (m === 'plus' || u.total === 0);
     if (canDraw && (g.bins.length || g.alley.length)) push({ type: 'v5rat', label: 'Take a rat from the rat deck' });
     if (canDraw) push({ type: 'v5card', label: 'Draw another card' });
+    if (canDraw && process.env.FOODOPT) push({ type: 'v5food', label: `Take ${process.env.FOODTAKE || 1} Food from the Food pile` });
     for (let i = acts.length - 1; i >= 0; i--) if (!v5ok(p, v5cat(p, acts[i]))) {
       // delivery/exterm: keep if either side of its targets is allowed
       const a = acts[i];
@@ -520,7 +525,8 @@ function apply0(g, p, act, targetId, ratId) {
     const c5 = v5cat(p, act, targetId);
     if (c5 !== 'free') { p._v5.total++; p._v5[c5] = true; }
     const S = global.__v5 = global.__v5 || { rat: 0, card: 0, att: 0, def: 0, turns: 0 };
-    if (act.type === 'v5rat' || act.type === 'v5card') p._v5.drew = true;
+    if (act.type === 'v5rat' || act.type === 'v5card' || act.type === 'v5food') p._v5.drew = true;
+    if (act.type === 'v5food') { S.food = (S.food || 0) + 1; for (let k = 0; k < +(process.env.FOODTAKE || 1); k++) p.hand.push({ id: E.rid(), card: 'food' }); E.logAdd(g, `${p.name} takes Food from the Food pile.`); return; }
     if (act.type === 'v5rat') { S.rat++; const b = E.takeFromAlley(g, null); if (b) { if (E.ratEnters(g, p, b.rat)) E.logAdd(g, `${p.name} takes a ${b.rat.name} from the rat deck.`); else E.logAdd(g, `${p.name}'s kitchen is closed to rats — it goes back.`); } return; }
     if (act.type === 'v5card') { S.card++; const c = E.drawCard(g); if (c) resolveDraw(g, p, c, true); return; }
     if (c5 !== 'free') S[c5]++;
@@ -843,6 +849,8 @@ function apply0(g, p, act, targetId, ratId) {
 
 function endTurn(g) {
   const p = g.players[g.active];
+  // TARGETTIMING: Territorial on you ends at the end of your own turn (you discard it)
+  if (process.env.TARGETTIMING && p.territorial) { p.territorial = 0; p._terrBy = null; }
   while (p.hand.length > HAND) {
     // Food-as-cards: discard the oldest non-Food card first; discarded Food returns to the Food pile
     let i = 0;
@@ -954,7 +962,9 @@ function botTurnV5(g, p) {
         if (u.total < 1 && best && best.type !== 'end') choice = best;
         else if (drawOpen) choice = (p.hand.length <= 2 || !want) && has('v5card') ? has('v5card') : (has('v5rat') || has('v5card'));
       } else if (drawOpen && u.total === 0) {
-        if (p.hand.length <= 1 && has('v5card')) choice = has('v5card');
+        const needFood = foodTotal(p) < 2 && (p.stars < (p.maxStars || E.STARS) - 1 || p.rats.some(r => ['feed_grow', 'breed', 'feed_draw', 'scavenge', 'alpha_feed'].includes(r.prop)));
+        if (has('v5food') && needFood && Math.random() < 0.5) choice = has('v5food');
+        else if (p.hand.length <= 1 && has('v5card')) choice = has('v5card');
         else if (weak || Math.random() < RATP) choice = (want && has('v5rat')) || has('v5card') || best;
         else choice = best;
       } else if (best && best.type !== 'end') choice = best;   // ad: second play of the other category
