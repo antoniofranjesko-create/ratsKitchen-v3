@@ -22,7 +22,7 @@ const RATS = {
   alpha:  { name: 'Alpha Rat',  w: 2, heat: 2, prop: 'alpha_guard', col: true,  desc: 'While Alpha is in your kitchen, none of your rats can be Poached. Cannot be Cat-shielded.' },
   sewer:  { name: 'Sewer Rat',  w: 1, heat: 0, prop: null,          col: false, desc: 'Colourless and heat 0 — invisible to inspection.' },
   toll:   { name: 'Toll Rat',   w: 1, heat: 1, prop: 'tax',         col: true,  desc: 'If inspected while you hold it, the inspector gives you a card.' },
-  feral:  { name: 'Feral Rat',  w: 1, heat: 1, prop: 'no_dump',     col: true,  desc: 'Cannot be moved by sabotage or dump effects.' },
+  feral:  { name: 'Feral Rat',  w: 1, heat: 1, prop: 'no_move',     col: true,  desc: 'Can-t be moved by rivals: no Poach, no Hot Chilli.' },
   spice:  { name: 'Spice Rat',  w: 1, heat: 1, prop: 'no_explode',  col: true,  desc: 'Cannot be Hot Chilli-d. FEED 1 Food: clear a Hot Chilli from any of your rats. Once per turn.' },
   boiler: { name: 'Boiler Rat', w: 1, heat: 1, prop: 'no_steal',    col: true,  desc: 'Cannot be Poached.' },
   larder: { name: 'Larder Rat', w: 1, heat: 1, prop: 'feed_eat',    col: true,  desc: 'FEED 1 Food: eat this rat and regain 1 star. Once per turn.' },
@@ -148,6 +148,7 @@ function deckConfig(P) {
     Object.assign(ratMaster, { plain: +(process.env.STREET ?? 4), fat: +(process.env.FATN ?? 6), runner: 3, sow: 3, toll: 3, feral: +(process.env.IMM ?? 3), spice: +(process.env.IMM ?? 3),
       boiler: +(process.env.IMM ?? 3), larder: 3, grub: 3, breeder: 2, alpha: 1, sewer: 2, hog: +(process.env.HOG ?? 3) });
     // rat sheet v2 (21 Nov): Sow and Larder cut, Scavenger x2; STREETADD tops the deck back up with Street rats
+    if (process.env.NOBOILER) ratMaster.boiler = 0;   // 22 Nov: Boiler cut — Feral covers it
     if (process.env.SHEET) Object.assign(ratMaster, { sow: 0, larder: 0, scav: 2, plain: ratMaster.plain + +(process.env.STREETADD || 0) });
     return { actions, ratMaster, deckRats: 0, ratatoRats, hotratRats, reshuffleRats: 0 };
   }

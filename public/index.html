@@ -485,7 +485,7 @@ button:disabled{opacity:.35;cursor:not-allowed}
 <body>
 <div class="topbar">
   <div class="brand">RAT'S <b>KITCHEN</b></div>
-  <div class="meta"><button id="btnLeave" class="ghost leavebtn hidden">Leave table</button><span class="build">BUILD L1.2 · LONG MODE</span></div>
+  <div class="meta"><button id="btnLeave" class="ghost leavebtn hidden">Leave table</button><span class="build">BUILD L1.3 · LONG MODE</span></div>
 </div>
 
 <div id="lobby" class="wrap">
@@ -1215,7 +1215,8 @@ async function pickTargetRat(a, targetId){
   const k=STATE.players.find(x=>x.id===targetId);
   let rats=(k&&k.rats)||[];
   if(a.type==='chilli') rats=rats.filter(r=>r.prop!=='no_explode'&&!r.chilli);
-  if(a.type==='poach')  rats=rats.filter(r=>r.prop!=='no_steal'&&r.w<=1);
+  if(a.type==='poach')  rats=rats.filter(r=>r.prop!=='no_steal'&&r.prop!=='no_move'&&r.w<=1);
+  if(a.type==='chilli') rats=rats.filter(r=>r.prop!=='no_explode'&&r.prop!=='no_move');
   if(a.type==='muzzle') rats=rats.filter(r=>r.prop&&r.prop!=='no_explode'&&!r.muzzled);
   if(a.type==='disease') rats=rats.filter(r=>r.prop!=='no_explode'&&!r.diseased);
   if(!rats.length){ render(); return; }

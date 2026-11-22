@@ -322,7 +322,7 @@ function legalActions(g, p) {
       push({ id: c.id, type: t, label: `Arm ${E.CARDS[t].sub}` });
     // ---- poach: weight-1 rat, not Boiler, not in an Alpha-guarded kitchen ----
     if (t === 'poach' && true && canGainRat(p)) {
-      const vics = freeZones(opps).filter(o => !o._alphaGuard && !o.rats.some(r => r.prop === 'alpha_guard') && o.rats.some(r => r.prop !== 'no_steal' && r.prop !== 'alpha_guard' && r.w <= 1));
+      const vics = freeZones(opps).filter(o => !o._alphaGuard && !o.rats.some(r => r.prop === 'alpha_guard') && o.rats.some(r => r.prop !== 'no_steal' && r.prop !== 'no_move' && r.prop !== 'alpha_guard' && r.w <= 1));
       if (vics.length) push({ id: c.id, type: t, needsTarget: true, needsRat: 'target', targets: vics.map(o => o.id), label: 'Poach a rat' });
     }
     // ---- switcheroo ----
@@ -332,7 +332,7 @@ function legalActions(g, p) {
     }
     // ---- hot chilli: PLACE on a rival's rat (not Spice), detonates next turn ----
     if (t === 'chilli' && true) {
-      const vics = freeZones(opps).filter(o => o.rats.some(r => r.prop !== 'no_explode' && !r._chilliBy));
+      const vics = freeZones(opps).filter(o => o.rats.some(r => r.prop !== 'no_explode' && r.prop !== 'no_move' && !r._chilliBy));   // Feral can't be moved by rivals
       if (vics.length) push({ id: c.id, type: t, needsTarget: true, needsRat: 'target', targets: vics.map(o => o.id), label: 'Hot Chilli (place on a rat)' });
     }
     // ---- Scrap Fight (test): both have rats ----
@@ -624,7 +624,7 @@ function apply0(g, p, act, targetId, ratId) {
     }
     case 'poach': {
       bin(takeCard(act.id));
-      const pool = t.rats.filter(r => r.prop !== 'no_steal' && r.w <= 1);
+      const pool = t.rats.filter(r => r.prop !== 'no_steal' && r.prop !== 'no_move' && r.w <= 1);
       // honour the player's chosen rat when given; else auto-pick the best
       const r = (ratId && pool.find(x => x.id === ratId)) || pool.slice().sort((a, b) => b.w - a.w)[0];
       if (r && E.tryCat(g, t, r)) { E.logAdd(g, `${t.name}'s Cat shields the ${r.name}.`); p._actedAttack = true; break; }
@@ -666,7 +666,7 @@ function apply0(g, p, act, targetId, ratId) {
     }
     case 'chilli': {
       bin(takeCard(act.id));
-      const cpool = t.rats.filter(x => x.prop !== 'no_explode' && !x._chilliBy);
+      const cpool = t.rats.filter(x => x.prop !== 'no_explode' && x.prop !== 'no_move' && !x._chilliBy);
       const r = (ratId && cpool.find(x => x.id === ratId)) || cpool.slice().sort((a, b) => b.w - a.w)[0];
       if (r && E.tryCat(g, t, r)) { E.logAdd(g, `${t.name}'s Cat shields the ${r.name} from the chilli.`); p._actedAttack = true; break; }
       if (r) { r._chilliBy = p.id; E.logAdd(g, `${p.name} plants a Hot Chilli on ${t.name}'s ${r.name} — it blows next turn.`); }
