@@ -137,6 +137,7 @@ function deckConfig(P) {
     actions.inherit = +(process.env.INHN ?? 3);
     actions.muzzle = process.env.NERFS ? +(process.env.MUZN ?? 3) : 0;
     actions.fight = process.env.FIGHT ? +(process.env.FIGHTN ?? 3) : 0;
+    if (process.env.CUT) for (const k of process.env.CUT.split(',')) actions[k] = 0;
     actions.copycat = process.env.COPY ? +(process.env.COPYN ?? 3) : 0;
     actions.disease = process.env.NERFS ? +(process.env.DISN ?? 4) : 0;   // Inheritance back x3 (take 2 cards) — locked 21 Nov
     actions.feast = +(process.env.FEAST ?? 4);

@@ -647,7 +647,8 @@ function apply0(g, p, act, targetId, ratId) {
       else {
         const [win, wr, lose] = mine.teeth > theirs.teeth ? [p, mine, t] : [t, theirs, p];
         win.rats = win.rats.filter(x => x !== wr); g.bins.push({ id: wr.id, rat: wr });
-        E.damage(g, lose, 1);
+        // 22 Nov: the loser only loses a star when the challenger wins
+        if (win === p || !process.env.FIGHTCH) E.damage(g, lose, 1);
         if (S && win === p) S.fightwin = (S.fightwin || 0) + 1;
         E.logAdd(g, `Scrap Fight: ${p.name}'s ${mine.name} (Teeth ${mine.teeth}) vs ${t.name}'s ${theirs.name} (Teeth ${theirs.teeth}) — ${win.name} wins, ${lose.name} loses a star.`);
       }
