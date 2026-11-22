@@ -485,7 +485,7 @@ button:disabled{opacity:.35;cursor:not-allowed}
 <body>
 <div class="topbar">
   <div class="brand">RAT'S <b>KITCHEN</b></div>
-  <div class="meta"><button id="btnLeave" class="ghost leavebtn hidden">Leave table</button><span class="build">BUILD L1.3 · LONG MODE</span></div>
+  <div class="meta"><button id="btnLeave" class="ghost leavebtn hidden">Leave table</button><span class="build">BUILD L1.4 · LONG MODE</span></div>
 </div>
 
 <div id="lobby" class="wrap">
@@ -704,7 +704,7 @@ function render(){
     let cls=c.cls||CARD_CLS[c.card]||'drawn';
     // long mode: the three printed types decide the frame and label
     const lm=STATE.longMode&&LM_TYPE(c.card);
-    if(lm) cls={att:'attack',def:'defence',nb:'control',food:'buff',react:'defence'}[lm];   // Nerf/Buff in purple so it reads apart from Attack red
+    if(lm) cls={att:'attack',def:'defence',nb:'control',either:'control',food:'buff',react:'defence'}[lm];   // Nerf/Buff in purple so it reads apart from Attack red
     const band=inspBand(c);
     const short=shortDesc(c.desc);
     // for Scheduled cards, show the fixed colours as a readable subhead
@@ -909,8 +909,13 @@ function renderTurnGuide(meActive){
   let h='';
   if(meActive){
     const cap=STATE.playCap||2, full=(u.total||0)>=cap;
+    if(SIDE()){
+      h+=chip('✓ Drew 1','done')+`<span class="or">then ONE of: play${cap>1?' 1 card at a rival + 1 on you':' 1 card'} —</span>`;
+      for(const [k,lab] of [['att','At a rival'],['def','On you']]) h+=chip((u[k]?'✓ ':'')+lab,u[k]?'done':((drew||full)?'off':'open'));
+    } else {
     h+=chip('✓ Drew 1','done')+`<span class="or">then ONE of: play up to ${cap}, one of each type —</span>`;
     for(const [k,lab] of [['att','Attack'],['def','Defence'],['nb','Nerf/Buff']]) h+=chip((u[k]?'✓ ':'')+lab,u[k]?'done':((drew||full)?'off':'open'));
+    }
     h+='<span class="or">or</span>'+chip('Take a rat',drew?'done':(played?'off':'open'))+'<span class="or">or</span>'+chip('Draw a card',drew?'done':(played?'off':'open'))+'<span class="or">or</span>'+chip('Take Food',drew?'done':(played?'off':'open'));
     h+='<span class="or">· free: fire, feed</span>';
   } else h+=`<span class="or">On your turn: draw 1, then one choice. Grease &amp; Wok react for you.</span>`;
@@ -923,11 +928,11 @@ function showRulesSummary(){
   wrap.innerHTML=`<div class="box" style="max-width:460px">
     <div class="top" style="background:var(--lamp);color:var(--grease)">Long mode — your turn</div>
     <h3>Every turn you MUST</h3><p>1. Draw 1 card (a Snap Inspection fires on you).<br>2. Then make <b>ONE choice</b>:</p>
-    <p>• <b>Play cards</b> — up to <b>${STATE.playCap||2}</b>, each of a different type (<b>Attack</b>, <b>Defence</b>, <b>Nerf / Buff</b>)<br>• or <b>Take a rat</b> from the rat deck<br>• or <b>Draw another card</b><br>• or <b>Take 1 Food</b> from the Food pile (Food counts towards your 7-card hand)</p>
-    <h3>You MAY, for free</h3><p>• Fire an inspection you armed last turn<br>• Feed rats (each once a turn)<br>Healing (3 Food → 1 star) counts as your defence.</p>
+    <p>• <b>Play cards</b> — ${SIDE()?((STATE.playCap||2)>1?'<b>1 card aimed at a rival</b> (their kitchen, rats or hand) <b>and/or 1 card on your own kitchen</b>':'<b>1 card</b>'):`up to <b>${STATE.playCap||2}</b>, each of a different type (<b>Attack</b>, <b>Defence</b>, <b>Nerf / Buff</b>)`}<br>• or <b>Take a rat</b> from the rat deck<br>• or <b>Draw another card</b><br>• or <b>Take 1 Food</b> from the Food pile (Food counts towards your 7-card hand)</p>
+    <h3>You MAY, for free</h3><p>• Fire an inspection you armed last turn<br>• Feed rats (each once a turn)<br>Healing (3 Food → 1 star) counts as ${SIDE()?'your card on yourself':'your defence'}.</p>
     <h3>Reactions</h3><p>Grease the Palm cancels an inspection on you; Wok Block cancels any other attack. Both play automatically.</p>
     <h3>Win</h3><p>Start your turn with <b>${STATE.threshold} rat weight</b> (Rat King), or be the last stall standing.</p>
-    <p style="color:var(--ash)">Attack: inspections, Poach, Scrap Fight, Kleptomaniac, Ratata Quente, Hot Ratato. Defence: Board Up, Last Resort, healing. Nerf / Buff: Cat, Muzzle, Disease, Hot Chilli, Territorial, Inheritance, Special Delivery. Each card shows its type at the top.</p>
+    <p style="color:var(--ash)">${SIDE()?'At a rival: inspections (arming counts), Poach, Scrap Fight, Kleptomaniac, Ratata Quente, Hot Ratato, Muzzle, Disease, Hot Chilli, Territorial, Inheritance. On you: Board Up, Last Resort, Cat, healing. Special Delivery counts as whichever kitchen the rat goes to.':'Attack: inspections, Poach, Scrap Fight, Kleptomaniac, Ratata Quente, Hot Ratato. Defence: Board Up, Last Resort, healing. Nerf / Buff: Cat, Muzzle, Disease, Hot Chilli, Territorial, Inheritance, Special Delivery.'} Each card shows this at the top.</p>
     <div class="foot"><button data-close="1">Close</button></div></div>`;
   wrap.onclick=e=>{ if(e.target===wrap||e.target.dataset.close) wrap.remove(); };
   document.body.appendChild(wrap);
@@ -960,9 +965,14 @@ function shortName(n){return n.replace(/ Rat$/,'').replace(/^The /,'')}
 const ATTACK_CARDS=['poach','switch','chilli','hotratato','territorial','klepto','shakedown','mole','sched1','sched2'];
 const BUILD_CARDS=['food','delivery','recycle','rattrap','exterm','inherit','gambit'];
 // long mode: three printed card types — a turn plays up to N cards (table setting), each a different type
-const LM_SETS={att:['mole','sched1','sched2','poach','fight','klepto','hotratato','hotrat'],def:['boardup','lastresort'],nb:['cat','muzzle','disease','chilli','territorial','inherit','delivery'],react:['grease','wok'],food:['food']};
-const LM_LABEL={att:'Attack',def:'Defence',nb:'Nerf / Buff',react:'Reaction',food:'Food'};
-function LM_TYPE(k){for(const t in LM_SETS) if(LM_SETS[t].includes(k)) return t; return null;}
+const SIDE=()=>STATE&&STATE.v5turn==='side';
+const LM_SIDE={att:['mole','sched1','sched2','poach','fight','klepto','hotratato','hotrat','muzzle','disease','chilli','territorial','inherit'],def:['boardup','lastresort','cat'],either:['delivery'],react:['grease','wok'],food:['food']};
+const LM_SIDE_LABEL={att:'At a rival',def:'On you',either:'Rival or you',react:'Reaction',food:'Food'};
+const LM_SETS3={att:['mole','sched1','sched2','poach','fight','klepto','hotratato','hotrat'],def:['boardup','lastresort'],nb:['cat','muzzle','disease','chilli','territorial','inherit','delivery'],react:['grease','wok'],food:['food']};
+const LM_LABEL3={att:'Attack',def:'Defence',nb:'Nerf / Buff',react:'Reaction',food:'Food'};
+const LM_SETS_=()=>SIDE()?LM_SIDE:LM_SETS3;
+const LM_LABEL=new Proxy({},{get:(o,k)=>(SIDE()?LM_SIDE_LABEL:LM_LABEL3)[k]});
+function LM_TYPE(k){const S=LM_SETS_();for(const t in S) if(S[t].includes(k)) return t; return null;}
 function whyUnplayable(card){
   const a=STATE.youActed||{};
   const k=card.card;
@@ -973,7 +983,10 @@ function whyUnplayable(card){
     if(k==='food') return 'Food is spent with the buttons below: Heal (3 Food → 1 star) or Feed a rat';
     if(u.drew) return 'you took a rat, Food or a card this turn — no cards can be played';
     const ty=LM_TYPE(k);
-    if(ty && u[ty]) return `you've already played ${ty==='att'?'an':'a'} ${LM_LABEL[ty]} card this turn`;
+    if(SIDE()&&ty==='either'&&u.att&&u.def) return `you've played a card at a rival and one on yourself this turn`;
+    if(SIDE()&&ty==='att'&&u.att) return `you've already played a card aimed at a rival this turn`;
+    if(SIDE()&&ty==='def'&&u.def) return `you've already played a card on your own kitchen this turn`;
+    if(!SIDE()&&ty && u[ty]) return `you've already played ${ty==='att'?'an':'a'} ${LM_LABEL[ty]} card this turn`;
     if((u.total||0)>=(STATE.playCap||2)) return `you've played ${STATE.playCap||2} card${(STATE.playCap||2)>1?'s':''} this turn`;
   }
   // NOTE: unlimited card play — there is no one-attack/one-build-per-turn limit.

@@ -283,6 +283,16 @@ function cat3Of(type) { for (const k in CAT3) if (CAT3[k].includes(type)) return
 function v5cat(p, act, targetId) {
   if (V5FREE[act.type]) return 'free';
   if ((process.env.V5TURN || 'one') === 'cat3') return cat3Of(act.type);
+  // SIDE (23 Nov): one card aimed at a rival (their kitchen, rats or hand) + one card on your own kitchen.
+  // Arming a Scheduled Inspection counts as aimed at a rival unless ARMOWN is set.
+  if (process.env.V5TURN === 'side') {
+    if (act.type === 'sched1' || act.type === 'sched2') return process.env.ARMOWN ? 'def' : 'att';
+    if (targetId) return targetId === p.id ? 'def' : 'att';
+    const ts = act.targets || [];
+    if (!ts.length) return 'def';
+    if (ts.every(id => id === p.id)) return 'def';
+    return ts.includes(p.id) ? 'mixed' : 'att';
+  }
   if (act.type === 'delivery' || act.type === 'exterm') return (targetId ? targetId === p.id : (act.targets||[]).includes(p.id)) ? 'def' : 'att';
   return V5DEF[act.type] ? 'def' : 'att';
 }
@@ -294,6 +304,7 @@ function v5ok(p, cat) {
   if (m === 'one') return u.total < 1;
   if (m === 'two') return u.total < 2;   // 22 Nov: any 2 cards, no attack/defence split
   if (m === 'cat3') return u.total < (p._playCap || +(process.env.PLAYCAP || 2)) && !u[cat];
+  if (m === 'side') return cat !== 'mixed' && u.total < (p._playCap || +(process.env.PLAYCAP || 2)) && !u[cat];
   return !u[cat];   // ad
 }
 
