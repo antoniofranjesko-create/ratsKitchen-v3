@@ -355,7 +355,8 @@ function newGame(playerDefs) {
   // aside and reshuffled back so they only ever fire when drawn in play).
   const setAside = [];
   for (const p of players) {
-    if (process.env.NOFOODCARDS) p.food = 1; else p.hand.push({ id: rid(), card: 'food' });
+    if (process.env.FOODCARD) { for (let k = 0; k < +(process.env.FOODSTART ?? 1); k++) p.hand.push({ id: rid(), card: 'food' }); }   // Food as cards from a separate Food pile
+    else if (process.env.NOFOODCARDS) p.food = 1; else p.hand.push({ id: rid(), card: 'food' });
     let dealt = 0;
     while (dealt < HAND - 1) {
       const c = drawCard(g);

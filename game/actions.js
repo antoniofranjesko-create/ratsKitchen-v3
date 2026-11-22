@@ -81,7 +81,7 @@ function startTurn(g) {
   g.justDrew = [];   // what the active player drew this turn (for UI visibility)
   let draws = 1;
   // FOOD INCOME test levers. A: +1 Food token every turn. B: take 1 Food OR draw.
-  if (process.env.FOODINC === 'A') p.food = (p.food || 0) + 1;
+  if (process.env.FOODINC === 'A') { if (process.env.FOODCARD) p.hand.push({ id: E.rid ? E.rid() : ('f' + Math.random().toString(36).slice(2)), card: 'food' }); else p.food = (p.food || 0) + 1; }
   if (process.env.FOODINC === 'B') {
     const ft = (p.food || 0) + p.hand.reduce((s, c) => s + E.foodVal(c), 0);
     if (ft < HEALCOST && p.hand.length >= 3) { p.food = (p.food || 0) + 1; draws = 0; }
@@ -256,7 +256,7 @@ function payFood(g, p, n) {
   const tok = Math.min(p.food || 0, left); p.food = (p.food || 0) - tok; left -= tok;
   if (left <= 0) return true;
   const ord = p.hand.filter(c => E.foodVal(c)).sort((a, b) => n >= 2 ? E.foodVal(b) - E.foodVal(a) : E.foodVal(a) - E.foodVal(b));
-  for (const c of ord) { if (left <= 0) break; p.hand.splice(p.hand.indexOf(c), 1); g.discard.push(c); left -= E.foodVal(c); }
+  for (const c of ord) { if (left <= 0) break; p.hand.splice(p.hand.indexOf(c), 1); if (!(process.env.FOODCARD && c.card === 'food')) g.discard.push(c); left -= E.foodVal(c); }   // spent Food goes back to the Food pile
   return true;
 }
 // ── V5 TEST turn structure ─────────────────────────────────────────────────
@@ -843,7 +843,13 @@ function apply0(g, p, act, targetId, ratId) {
 
 function endTurn(g) {
   const p = g.players[g.active];
-  while (p.hand.length > HAND) { const c = p.hand.shift(); if (c.rat) g.bins.unshift(c); else g.discard.push(c); }
+  while (p.hand.length > HAND) {
+    // Food-as-cards: discard the oldest non-Food card first; discarded Food returns to the Food pile
+    let i = 0;
+    if (process.env.FOODCARD) { const j = p.hand.findIndex(c => c.card !== 'food'); if (j >= 0) i = j; }
+    const c = p.hand.splice(i, 1)[0];
+    if (c.rat) g.bins.unshift(c); else if (!(process.env.FOODCARD && c.card === 'food')) g.discard.push(c);
+  }
   if (!g.players.some(x => x.alive)) { g.over = true; g.winner = null; return; }   // no one left (simultaneous KO)
   // v4.1: warn the table about anyone holding Rat King weight
   for (const q of g.players) if (q.alive && E.weight(q) >= E.THRESHOLD)

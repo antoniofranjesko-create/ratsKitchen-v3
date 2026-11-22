@@ -1,7 +1,7 @@
 // ── LONG MODE (branch long-mode): this server runs long mode v1 by default ──
 // Any of these can still be overridden with an environment variable.
 const LONG_DEFAULTS = { V5: '1', V5TURN: 'ad', IMM: '2', FOODINC: 'A', NOFOODCARDS: '1', HEALCOST: '3', THRESH: '10',
-  STARSBYP: '6,5,4,3', KIND3: '1', SHEET: '1', NERFS: '1', FIGHT: '1', FIGHTCH: '1', FIGHTN: '2', CUT: 'exterm', BLOCKSWAP: '1' };
+  STARSBYP: '6,5,4,3', KIND3: '1', FOODCARD: '1', FOODSTART: '0', SHEET: '1', NERFS: '1', FIGHT: '1', FIGHTCH: '1', FIGHTN: '2', CUT: 'exterm', BLOCKSWAP: '1' };
 for (const [k, v] of Object.entries(LONG_DEFAULTS)) if (process.env[k] === undefined) process.env[k] = v;
 // RAT'S KITCHEN v3 — SERVER
 'use strict';
@@ -43,7 +43,7 @@ function project(g, viewerId, room) {
   const seat = id => room && room.players.find(x => x.id === id);
   return {
     over: g.over, winner: g.winner, active: g.players[g.active] && g.players[g.active].id,
-    turn: g.turn, threshold: E.THRESHOLD, maxStars: E.STARS, longMode: !!process.env.V5, closedCards: (g.closed || []).length, anyElim: g._firstElimTurn != null, log: g.log.slice(-40),
+    turn: g.turn, threshold: E.THRESHOLD, maxStars: E.STARS, longMode: !!process.env.V5, foodCards: !!process.env.FOODCARD, closedCards: (g.closed || []).length, anyElim: g._firstElimTurn != null, log: g.log.slice(-40),
     lastPlayed: g.lastPlayed || null,
     awaitingStep: (() => {
       // a step is available when the game isn't over, it's a bot's turn coming up,

@@ -858,7 +858,7 @@ function stallHTML(p){
       <div class="king"><div class="k"><span>Rat King</span><b>${p.weight} / ${STATE.threshold}</b></div>
         <div class="meter"><div class="fill" style="width:${pct}%"></div><div class="ticks">${ticks}</div></div></div>
       <div class="stat"><span class="k">Heat</span><span class="v">${p.heat}</span></div>
-      ${STATE.longMode?`<div class="stat food"><span class="k">Food</span><span class="v">${p.food||0}</span></div>`:''}
+      ${STATE.longMode&&!STATE.foodCards?`<div class="stat food"><span class="k">Food</span><span class="v">${p.food||0}</span></div>`:''}
     </div>
     ${rats}
     ${kitchenRow}
@@ -884,7 +884,7 @@ function renderMyBar(){
   }
   (p.kitchenCards||[]).forEach(kc=>extra.push(`<span class="pip terr" title="placed by ${esc(kc.by)}">${esc(kc.name)}</span>`));
   bar.innerHTML=`<div class="mb-stats"><span class="stars">${bulbs}</span>
-      <span class="mb-nums"><span class="w"><b>${p.weight}</b>/ ${STATE.threshold} weight</span><span class="h"><b>${p.heat}</b>heat</span>${STATE.longMode?`<span class="f"><b>${p.food||0}</b>food</span>`:''}</span></div>
+      <span class="mb-nums"><span class="w"><b>${p.weight}</b>/ ${STATE.threshold} weight</span><span class="h"><b>${p.heat}</b>heat</span>${STATE.longMode&&!STATE.foodCards?`<span class="f"><b>${p.food||0}</b>food</span>`:''}</span></div>
     <div class="mb-rats">${p.rats.length?p.rats.map(ratHTML).join(''):'<span class="mb-none">no rats yet</span>'}</div>
     ${extra.length?`<div class="mb-extra">${extra.join('')}</div>`:''}`;
 }
@@ -915,7 +915,7 @@ function showRulesSummary(){
   const wrap=document.createElement('div'); wrap.className='cardinfo';
   wrap.innerHTML=`<div class="box" style="max-width:460px">
     <div class="top" style="background:var(--lamp);color:var(--grease)">Long mode — your turn</div>
-    <h3>Every turn you MUST</h3><p>1. Draw 1 card (a Snap Inspection fires on you).<br>2. Take 1 Food.<br>3. Then make <b>ONE choice</b>:</p>
+    <h3>Every turn you MUST</h3><p>1. Draw 1 card (a Snap Inspection fires on you).<br>2. Take 1 Food card from the Food pile (it counts towards your 7-card hand).<br>3. Then make <b>ONE choice</b>:</p>
     <p>• <b>Play cards</b> — up to <b>1 attack</b> and <b>1 defence</b><br>• or <b>Take a rat</b> from the rat deck<br>• or <b>Draw another card</b></p>
     <h3>You MAY, for free</h3><p>• Fire an inspection you armed last turn<br>• Feed rats (each once a turn)<br>Healing (3 Food → 1 star) counts as your defence.</p>
     <h3>Reactions</h3><p>Grease the Palm cancels an inspection on you; Wok Block cancels any other attack. Both play automatically.</p>
@@ -961,6 +961,7 @@ function whyUnplayable(card){
     const u=a.v5||{};
     if(k==='grease') return 'Reaction — cancels an inspection aimed at you, automatically';
     if(k==='wok') return 'Reaction — cancels any other attack aimed at you, automatically';
+    if(k==='food') return 'Food is spent with the buttons below: Heal (3 Food → 1 star) or Feed a rat';
     if(u.drew) return 'you took a rat or drew a card this turn — no cards can be played';
     const isDef=LM_DEF.includes(k);
     if(isDef && u.def) return 'you\'ve already played your defence this turn';
