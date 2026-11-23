@@ -270,13 +270,13 @@ function payFood(g, p, n) {
 //   V5TURN=ad   : play 1 attack and/or 1 defence | take a rat | draw a card
 //   V5TURN=plus : play 1 card AND then take a rat or draw a card
 const V5FREE = { fire: 1, feed: 1, breed: 1, end: 1, fire_wait: 1, fire_blocked: 1, v5rat: 1, v5card: 1, v5food: 1 };
-const V5DEF = { food_heal: 1, eat_lastresort: 1, boardup: 1, cat: 1, gambit: 1, copycat: 1 };
+const V5DEF = { food_heal: 1, eat_lastresort: 1, boardup: 1, cat: 1, gambit: 1, copycat: 1, backdoor: 1 };
 // ARMDEF: arming an inspection names no rival yet, so it counts as a card on yourself
 if (process.env.ARMDEF) { V5DEF.sched1 = 1; V5DEF.sched2 = 1; }
 // cat3 (22 Nov): three printed card types; a turn plays up to N cards (room setting), each of a different type
 const CAT3 = {
   att: ['mole', 'sched1', 'sched2', 'poach', 'fight', 'klepto', 'hotratato', 'play_ratato'],
-  def: ['boardup', 'eat_lastresort', 'food_heal'],
+  def: ['boardup', 'eat_lastresort', 'food_heal', 'backdoor'],
   nb:  ['cat', 'muzzle', 'disease', 'chilli', 'territorial', 'inherit', 'delivery'],
 };
 function cat3Of(type) { for (const k in CAT3) if (CAT3[k].includes(type)) return k; return 'att'; }
@@ -388,6 +388,9 @@ function legalActions(g, p) {
       if (shieldable.length) push({ id: c.id, type: 'cat', needsRat: true, label: 'Cat — shield a rat' });
     }
     // ---- board up ----
+    // ---- back door: swap one of your rats for the top of the rat deck (23 Nov) ----
+    if (t === 'backdoor' && p.rats.length && !(p.territorial > 0) && (g.bins.length || g.alley.length))
+      push({ id: c.id, type: t, needsRat: true, label: 'Back Door (swap a rat for the top of the rat deck)' });
     if (t === 'boardup' && true)
       push({ id: c.id, type: t, label: 'Board Up (safe 1 turn)' });
     // ---- rat trap ----
@@ -730,6 +733,19 @@ function apply0(g, p, act, targetId, ratId) {
       if (r) { r._catShield = true; E.logAdd(g, `${p.name} shields a ${r.name} with a Cat.`); }
       p._actedBuild = true; break;
     }
+    case 'backdoor': {
+      const r = p.rats.find(x => x.id === ratId); if (!r || p.territorial > 0) break;
+      bin(takeCard(act.id));
+      p.rats = p.rats.filter(x => x.id !== r.id);
+      g.bins.push({ id: r.id, rat: r });
+      while (g.alley.length) g.bins.push(g.alley.pop());   // shuffle: the face-down top rat goes back in too
+      E.refillAlley(g);
+      const b = E.takeFromAlley(g, null);
+      if (b) E.ratEnters(g, p, b.rat);
+      if (global.__v5) global.__v5.backdoor = (global.__v5.backdoor || 0) + 1;
+      p._actedBuild = true;
+      E.logAdd(g, `${p.name} shoos a ${r.name} out the Back Door${b ? ` — a ${b.rat.name} wanders in` : ''}.`); break;
+    }
     case 'boardup': { bin(takeCard(act.id)); p.boardup = 1; p._actedBuild = true; E.logAdd(g, `${p.name} boards up.`); break; }
     case 'rattrap': { bin(takeCard(act.id)); t._rattrap = p.id; p._actedBuild = true; E.logAdd(g, `${p.name} sets a Rat Trap on ${t.name}.`); break; }
     case 'delivery': {
@@ -979,8 +995,17 @@ function botTurnV5(g, p) {
       const u = p._v5, m = process.env.V5TURN || 'one';
       const drawOpen = has('v5rat') || has('v5card');
       const want = E.weight(p) < THRESHOLD + 1;
+      // Back Door: swap out a nerfed or junk rat
+      const bd = has('backdoor');
+      const bad = bd && p.rats.slice().sort((a, b) => ((b._dis ? 2 : 0) + (b._chilliBy ? 3 : 0) + (b._muzzled ? 1 : 0) + (b.w === 0 ? 2 : 0) + b.heat * 0.1) - ((a._dis ? 2 : 0) + (a._chilliBy ? 3 : 0) + (a._muzzled ? 1 : 0) + (a.w === 0 ? 2 : 0) + a.heat * 0.1))[0];
+      if (bd && bad && (bad._dis || bad._chilliBy || bad._muzzled || bad.w === 0)) { choice = bd; choice._own = bad.id; }
+    }
+    if (!choice) {
+      const u = p._v5, m = process.env.V5TURN || 'one';
+      const drawOpen = has('v5rat') || has('v5card');
+      const want = E.weight(p) < THRESHOLD + 1;
       // what would we play? (botChoose without the draw options)
-      const plays = acts.filter(a => !['v5rat', 'v5card'].includes(a.type));
+      const plays = acts.filter(a => !['v5rat', 'v5card', 'backdoor'].includes(a.type));
       let best = botChoose(g, p, plays);
       const weak = !best || ['end', 'gambit', 'klepto', 'cat'].includes(best.type) || (best.type === 'exterm' && false);
       if (best && best.type === 'delivery') best = has('delivery');
@@ -1001,7 +1026,8 @@ function botTurnV5(g, p) {
     if (choice.type === 'delivery') target = choice.targets.includes(p.id) ? p.id : (lead && choice.targets.includes(lead.id) ? null : null);
     if (choice.type === 'delivery' && !target) { break; }
     if (choice.needsRat) {
-      if (choice._pick) { ratId = choice._pick; target = lead.id; }
+      if (choice._own) { ratId = choice._own; }
+      else if (choice._pick) { ratId = choice._pick; target = lead.id; }
       else if (choice.type === 'exterm') {
         const kitchen = target ? g.players.find(x => x.id === target) : p;
         const r = kitchen && kitchen.rats.slice().sort((a, b) => (kitchen.id===p.id ? b.heat-a.heat : b.w-a.w))[0];

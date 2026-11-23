@@ -485,7 +485,7 @@ button:disabled{opacity:.35;cursor:not-allowed}
 <body>
 <div class="topbar">
   <div class="brand">RAT'S <b>KITCHEN</b></div>
-  <div class="meta"><button id="btnLeave" class="ghost leavebtn hidden">Leave table</button><span class="build">BUILD L1.4 · LONG MODE</span></div>
+  <div class="meta"><button id="btnLeave" class="ghost leavebtn hidden">Leave table</button><span class="build">BUILD L1.5 · LONG MODE</span></div>
 </div>
 
 <div id="lobby" class="wrap">
@@ -580,8 +580,8 @@ socket.on('rejoinFail',()=>store.del('rk_room'));
 // a link like ?table=ABCD fills in the table code
 try{const q=new URLSearchParams(location.search).get('table'); if(q) setTimeout(()=>{$('code').value=q.toUpperCase();},0);}catch(e){}
 const RAT_ART={plain:'🐀',runner:'🐀',fat:'🐀',sow:'🐀',alpha:'👑',sewer:'🐀',toll:'🐀',feral:'🐀',spice:'🐀',boiler:'🐀',larder:'🐀',grub:'🐛',breeder:'🍼',ratato:'🥔',hotrat:'🌡️'};
-const CARD_ART={mole:'🦫',sched1:'🦅',sched2:'🦅',wd_snap:'🦅',wd_snap2:'🦅',wd_mole:'🦫',poach:'🎣',ratato:'🥔',hotrat:'🌡️',switch:'🔄',hotratato:'🥔',chilli:'🌶️',territorial:'🚧',grease:'💰',food:'🍜',cat:'🐱',wok:'🍳',boardup:'🔨',rattrap:'🪤',delivery:'🚚',pelican:'🦩',recycle:'♻️',exterm:'🧯',inherit:'📜',desperate:'🕵',gambit:'🎴',klepto:'🧤',shakedown:'💢',lastresort:'🍽️',misc:'🎲'};
-const CARD_CLS={mole:'attack',sched1:'attack',sched2:'attack',wd_snap:'drawn',wd_snap2:'drawn',wd_mole:'drawn',poach:'attack',ratato:'attack',ratato_rat:'attack',switch:'attack',hotratato:'attack',hotrat:'attack',chilli:'attack',territorial:'control',grease:'attack',klepto:'attack',shakedown:'attack',food:'buff',cat:'defence',wok:'defence',boardup:'defence',lastresort:'buff',rattrap:'engine',delivery:'engine',pelican:'engine',recycle:'engine',exterm:'engine',inherit:'engine',desperate:'engine',gambit:'engine',misc:'drawn'};
+const CARD_ART={mole:'🦫',sched1:'🦅',sched2:'🦅',wd_snap:'🦅',wd_snap2:'🦅',wd_mole:'🦫',poach:'🎣',ratato:'🥔',hotrat:'🌡️',switch:'🔄',hotratato:'🥔',chilli:'🌶️',territorial:'🚧',grease:'💰',food:'🍜',cat:'🐱',backdoor:'🚪',wok:'🍳',boardup:'🔨',rattrap:'🪤',delivery:'🚚',pelican:'🦩',recycle:'♻️',exterm:'🧯',inherit:'📜',desperate:'🕵',gambit:'🎴',klepto:'🧤',shakedown:'💢',lastresort:'🍽️',misc:'🎲'};
+const CARD_CLS={mole:'attack',sched1:'attack',sched2:'attack',wd_snap:'drawn',wd_snap2:'drawn',wd_mole:'drawn',poach:'attack',ratato:'attack',ratato_rat:'attack',switch:'attack',hotratato:'attack',hotrat:'attack',chilli:'attack',territorial:'control',grease:'attack',klepto:'attack',shakedown:'attack',food:'buff',cat:'defence',backdoor:'defence',wok:'defence',boardup:'defence',lastresort:'buff',rattrap:'engine',delivery:'engine',pelican:'engine',recycle:'engine',exterm:'engine',inherit:'engine',desperate:'engine',gambit:'engine',misc:'drawn'};
 const CARD_TYPE={attack:'Attack',defence:'Defence',engine:'Engine',control:'Control',nerf:'Nerf',buff:'Buff',drawn:'When drawn'};
 
 $('btnCreate').onclick=()=>socket.emit('create',{name:$('name').value.trim(),token:TOKEN});
@@ -932,7 +932,7 @@ function showRulesSummary(){
     <h3>You MAY, for free</h3><p>• Fire an inspection you armed last turn<br>• Feed rats (each once a turn)<br>Healing (3 Food → 1 star) counts as ${SIDE()?'your card on yourself':'your defence'}.</p>
     <h3>Reactions</h3><p>Grease the Palm cancels an inspection on you; Wok Block cancels any other attack. Both play automatically.</p>
     <h3>Win</h3><p>Start your turn with <b>${STATE.threshold} rat weight</b> (Rat King), or be the last stall standing.</p>
-    <p style="color:var(--ash)">${SIDE()?'At a rival: inspections (arming counts), Poach, Scrap Fight, Kleptomaniac, Ratata Quente, Hot Ratato, Muzzle, Disease, Hot Chilli, Territorial, Inheritance. On you: Board Up, Last Resort, Cat, healing. Special Delivery counts as whichever kitchen the rat goes to.':'Attack: inspections, Poach, Scrap Fight, Kleptomaniac, Ratata Quente, Hot Ratato. Defence: Board Up, Last Resort, healing. Nerf / Buff: Cat, Muzzle, Disease, Hot Chilli, Territorial, Inheritance, Special Delivery.'} Each card shows this at the top.</p>
+    <p style="color:var(--ash)">${SIDE()?'At a rival: inspections (arming counts), Poach, Scrap Fight, Kleptomaniac, Ratata Quente, Hot Ratato, Muzzle, Disease, Hot Chilli, Territorial, Inheritance. On you: Board Up, Last Resort, Cat, Back Door, healing. Special Delivery counts as whichever kitchen the rat goes to.':'Attack: inspections, Poach, Scrap Fight, Kleptomaniac, Ratata Quente, Hot Ratato. Defence: Board Up, Last Resort, healing. Nerf / Buff: Cat, Muzzle, Disease, Hot Chilli, Territorial, Inheritance, Special Delivery.'} Each card shows this at the top.</p>
     <div class="foot"><button data-close="1">Close</button></div></div>`;
   wrap.onclick=e=>{ if(e.target===wrap||e.target.dataset.close) wrap.remove(); };
   document.body.appendChild(wrap);
@@ -966,9 +966,9 @@ const ATTACK_CARDS=['poach','switch','chilli','hotratato','territorial','klepto'
 const BUILD_CARDS=['food','delivery','recycle','rattrap','exterm','inherit','gambit'];
 // long mode: three printed card types — a turn plays up to N cards (table setting), each a different type
 const SIDE=()=>STATE&&STATE.v5turn==='side';
-const LM_SIDE={att:['mole','sched1','sched2','poach','fight','klepto','hotratato','hotrat','muzzle','disease','chilli','territorial','inherit'],def:['boardup','lastresort','cat'],either:['delivery'],react:['grease','wok'],food:['food']};
+const LM_SIDE={att:['mole','sched1','sched2','poach','fight','klepto','hotratato','hotrat','muzzle','disease','chilli','territorial','inherit'],def:['boardup','lastresort','cat','backdoor'],either:['delivery'],react:['grease','wok'],food:['food']};
 const LM_SIDE_LABEL={att:'At a rival',def:'On you',either:'Rival or you',react:'Reaction',food:'Food'};
-const LM_SETS3={att:['mole','sched1','sched2','poach','fight','klepto','hotratato','hotrat'],def:['boardup','lastresort'],nb:['cat','muzzle','disease','chilli','territorial','inherit','delivery'],react:['grease','wok'],food:['food']};
+const LM_SETS3={att:['mole','sched1','sched2','poach','fight','klepto','hotratato','hotrat'],def:['boardup','lastresort','backdoor'],nb:['cat','muzzle','disease','chilli','territorial','inherit','delivery'],react:['grease','wok'],food:['food']};
 const LM_LABEL3={att:'Attack',def:'Defence',nb:'Nerf / Buff',react:'Reaction',food:'Food'};
 const LM_SETS_=()=>SIDE()?LM_SIDE:LM_SETS3;
 const LM_LABEL=new Proxy({},{get:(o,k)=>(SIDE()?LM_SIDE_LABEL:LM_LABEL3)[k]});
@@ -1005,6 +1005,7 @@ function whyUnplayable(card){
   if(k==='recycle') return 'nothing in the discard to recover';
   if(k==='exterm') return 'no rats anywhere to exterminate';
   if(k==='lastresort') return 'you have no rat to eat';
+  if(k==='backdoor') return 'you need a rat to swap, and no Territorial on your kitchen';
   if(k==='wok') return 'Wok Block is reactive — plays automatically when inspected';
   if(k==='boardup') return 'can\'t board up right now';
   if(k==='sched1'||k==='sched2') return a.hasArmed ? 'you already have an inspection armed' : 'no inspection can be armed this round (Inspector\'s Day Off)';
@@ -1052,7 +1053,7 @@ function playVerb(a,card){
   // friendlier verb than the raw label when a card is already selected
   const map={mole:'Inspect (snap, -1 star)',sched1:'Arm inspection',sched2:'Arm 2-colour inspection',
     poach:'Poach a rat',ratato:'Dump a rat',hotratato:'Ratata Quente — dump a rat',switch:'Swap a rat',chilli:'Explode a rat',
-    territorial:'Mark territorial',grease:'Grease their inspector',boardup:'Board up',cat:'Shield a rat',wok:'Ready a Wok block',
+    territorial:'Mark territorial',grease:'Grease their inspector',boardup:'Board up',cat:'Shield a rat',backdoor:'Shoo a rat out the Back Door',wok:'Ready a Wok block',
     rattrap:'Set a rat trap',pelican:'Send the pelican',delivery:'Deliver an alley rat',recycle:'Recycle a discard',
     exterm:'Exterminate a rat',inherit:'Place Inheritance',desperate:'Dodgy Inspector (-1 star)',feed:'Feed the rat (1 Food)',breed:'Breeder: take alley rat',gambit:'Look at top 3',klepto:'Lift a card',shakedown:'Shake down for a card',
     lastresort:'Eat a rat for stars',fight:'Start a Scrap Fight',muzzle:'Muzzle a rat',disease:'Infect a rat',food_heal:'Spend 2 Food (+star)',breed:'Breeder: 2 Food → rat',misc:'Do the odd job'};
@@ -1126,7 +1127,7 @@ function choose(a){
   // Ratata Quente: pick a kitchen, then which of YOUR rats to dump
   if(a.type==='hotratato'){ picking={act:a,targets:a.targets,msg:'Ratata Quente — click a kitchen',then:'myRat'}; selectedCardId=null; render(); return; }
   // Cat / Last Resort: no target, just pick one of YOUR rats
-  if(a.type==='cat'||a.type==='eat_lastresort'){ selectedCardId=null; ownRatOnly(a); return; }
+  if(a.type==='cat'||a.type==='eat_lastresort'||a.type==='backdoor'){ selectedCardId=null; ownRatOnly(a); return; }
   // pick which of the 3 alley rats to take
   if(a.needsAlleyRat){ selectedCardId=null; alleyPick(a); return; }
   if(a.type==='fire'&&a.pickOneCol){
@@ -1181,7 +1182,7 @@ async function recyclePick(a){
 const ALL_CARD_TYPES=[['mole','Snap Inspection'],['sched1','Scheduled (1)'],['sched2','Scheduled (2)'],
   ['poach','Poach'],['switch','Switcheroo'],['chilli','Hot Chilli'],['grease','Grease the Palm'],
   ['klepto','Kleptomaniac'],['shakedown','Shakedown'],['territorial','Territorial'],
-  ['wok','Wok Block'],['boardup','Board Up'],['food','Food'],['cat','Cat'],['lastresort','Last Resort'],
+  ['wok','Wok Block'],['boardup','Board Up'],['food','Food'],['cat','Cat'],['backdoor','Back Door'],['lastresort','Last Resort'],
   ['delivery','Special Delivery'],['recycle','Recycle Day'],['rattrap','Rat Trap'],
   ['exterm','Exterminator'],['inherit','Inheritance'],['gambit','Gambit']].sort((a,b)=>a[1].localeCompare(b[1]));
 async function shakedownName(a, targetId){
@@ -1266,7 +1267,7 @@ async function ownRatOnly(a){
   let rats=(me&&me.rats)||[];
   if(a.type==='cat') rats=rats.filter(r=>!r.shielded&&r.kind!=='fat');
   if(!rats.length){ render(); return; }
-  const msg=a.type==='cat'?'Shield which rat with the Cat?':'Eat which rat? (gain stars = its weight)';
+  const msg=a.type==='cat'?'Shield which rat with the Cat?':a.type==='backdoor'?'Shoo which rat out the Back Door? (the top rat of the rat deck comes in)':'Eat which rat? (gain stars = its weight)';
   const pick=await modalPick(msg, ratOpts(rats));
   if(pick) socket.emit('act',{type:a.type,id:a.id,ratId:pick});
   else render();

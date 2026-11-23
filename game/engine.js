@@ -52,6 +52,7 @@ const CARDS = {
   wok:         { name: 'Wok Block',       cls: 'defence', desc: process.env.BLOCKSWAP ? 'Reactive. Cancel one attack aimed at you that is not an inspection.' : 'Reactive. Cancel one inspection aimed at you.' },
   boardup:     { name: 'Board Up',        cls: 'defence', desc: 'Your kitchen cannot be attacked for one turn.' },
   food:        { name: 'Food',            cls: 'buff', desc: 'Spend 2 Food to regain 1 star. Or spend 1 to feed a rat.' },
+  backdoor:    { name: 'Back Door',       cls: 'buff', desc: 'Shuffle one of your rats (and anything tucked under it) back into the rat deck, then take the top rat.' },
   cat:         { name: 'Cat',             cls: 'buff', desc: 'Play on one of your rats (not Fat) to shield it — blocks the next single attack on that rat.' },
   lastresort:  { name: 'Last Resort',     cls: 'buff', desc: 'Eat any one of your rats and regain stars equal to its weight.' },
   delivery:    { name: 'Special Delivery',cls: 'engine', desc: 'Take any rat from the alley and put it in ANY kitchen — yours, or a rival\'s.' },
@@ -142,6 +143,7 @@ function deckConfig(P) {
     actions.fight = process.env.FIGHT ? +(process.env.FIGHTN ?? 3) : 0;
     if (process.env.CUT) for (const k of process.env.CUT.split(',')) actions[k] = 0;
     actions.copycat = process.env.COPY ? +(process.env.COPYN ?? 3) : 0;
+    actions.backdoor = process.env.BACKDOOR ? +(process.env.BACKDOORN ?? 4) : 0;   // 23 Nov: Back Door x4 (on you)
     actions.disease = process.env.NERFS ? +(process.env.DISN ?? 4) : 0;   // Inheritance back x3 (take 2 cards) — locked 21 Nov
     actions.feast = +(process.env.FEAST ?? 4);
     if (process.env.NOFOODCARDS) { actions.food = 0; actions.feast = 0; }
@@ -447,6 +449,7 @@ function refillAlley(g) {
     if (idx < 0) break;                       // bins exhausted
     const got = g.bins.splice(idx, 1)[0];
     if (got.rat && got.rat.kind === 'hog') got.rat.w = 1;
+    if (got.rat) { got.rat._chilliBy = null; got.rat._catShield = false; }   // placed cards (Hot Chilli, Cat) are discarded when a rat leaves play
     if (got.rat && got.rat._muzzled) { got.rat.prop = got.rat._muzzled; got.rat._muzzled = null; }   // tucked nerfs are discarded when a rat leaves play
     if (got.rat && got.rat._dis) { got.rat.heat -= got.rat._dis; got.rat._dis = 0; }   // fed food is discarded when a Hog leaves play
     g.alley.push(got);
