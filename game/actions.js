@@ -236,6 +236,25 @@ function flipMarketDay(g) {
       anyWin();
       break;
     }
+    case 'stink': {
+      for (const q of alive()) {
+        const n = q.rats.filter(r => r._stink).length;
+        if (n) { E.damage(g, q, n); E.logAdd(g, `Stink Inspection: ${q.name} loses ${n} star${n > 1 ? 's' : ''} for Stink Bombs.`); if (global.__v5) global.__v5.stinkHit = (global.__v5.stinkHit || 0) + n; }
+        if (g.over) return;
+      }
+      break;
+    }
+    case 'pest': {
+      for (const q of alive()) {
+        const gone = q.rats.filter(r => r._tag);
+        if (!gone.length) continue;
+        q.rats = q.rats.filter(r => !r._tag);
+        for (const r of gone) g.bins.push({ id: r.id, rat: r });
+        E.logAdd(g, `Pest Control: ${q.name} loses ${gone.map(r => r.name).join(', ')} to the rat deck.`);
+        if (global.__v5) global.__v5.tagHit = (global.__v5.tagHit || 0) + gone.length;
+      }
+      break;
+    }
     case 'day_off':   // handled as a legality modifier (no arming this round)
     case 'curfew':    // social-layer freeze — no mechanical effect vs bots
       break;
@@ -277,7 +296,7 @@ if (process.env.ARMDEF) { V5DEF.sched1 = 1; V5DEF.sched2 = 1; }
 const CAT3 = {
   att: ['mole', 'sched1', 'sched2', 'poach', 'fight', 'klepto', 'hotratato', 'play_ratato'],
   def: ['boardup', 'eat_lastresort', 'food_heal', 'backdoor'],
-  nb:  ['cat', 'muzzle', 'disease', 'chilli', 'territorial', 'inherit', 'delivery'],
+  nb:  ['cat', 'muzzle', 'disease', 'stink', 'eartag', 'chilli', 'territorial', 'inherit', 'delivery'],
 };
 function cat3Of(type) { for (const k in CAT3) if (CAT3[k].includes(type)) return k; return 'att'; }
 function v5cat(p, act, targetId) {
@@ -359,6 +378,11 @@ function legalActions(g, p) {
       if (can) push({ id: c.id, type: t, label: 'Copycat' });
     }
     // ---- Muzzle / Disease (test): tuck under a rival's rat; Spice can't be debuffed ----
+    if ((t === 'stink' || t === 'eartag') && process.env.MD2) {
+      const ok = r => r.prop !== 'no_explode' && (t === 'stink' ? !r._stink : (r.prop !== 'no_move' && !r._tag));
+      const vics = freeZones(opps).filter(o => o.rats.some(ok));
+      if (vics.length) push({ id: c.id, type: t, needsTarget: true, needsRat: 'target', targets: vics.map(o => o.id), label: t === 'stink' ? 'Stink Bomb (costs a star on Stink Inspection)' : 'Ear Tag (rat goes on Pest Control)' });
+    }
     if ((t === 'muzzle' || t === 'disease') && process.env.NERFS) {
       const ok = r => r.prop !== 'no_explode' && (t === 'muzzle' ? (r.prop && !r._muzzled) : (r._dis || 0) < 1);
       const vics = freeZones(opps).filter(o => o.rats.some(ok));
@@ -522,7 +546,7 @@ function kind3Check(g) {
     }
   }
 }
-const WOKABLE = { poach: 1, chilli: 1, hotratato: 1, play_ratato: 1, muzzle: 1, disease: 1, fight: 1, klepto: 1, territorial: 1, inherit: 1, delivery: 1 };
+const WOKABLE = { stink: 1, eartag: 1, poach: 1, chilli: 1, hotratato: 1, play_ratato: 1, muzzle: 1, disease: 1, fight: 1, klepto: 1, territorial: 1, inherit: 1, delivery: 1 };
 function apply(g, p, act, targetId, ratId) {
   // BLOCKSWAP: Wok Block cancels any non-inspection attack aimed at its holder
   if (process.env.BLOCKSWAP && WOKABLE[act.type] && targetId && targetId !== p.id && act.id) {
@@ -722,6 +746,16 @@ function apply0(g, p, act, targetId, ratId) {
       if (r && E.tryCat(g, t, r)) { E.logAdd(g, `${t.name}'s Cat shields the ${r.name}.`); p._actedAttack = true; break; }   // Cat blocks anything aimed at its rat
       if (r && act.type === 'muzzle') { r._muzzled = r.prop; r.prop = null; E.logAdd(g, `${p.name} muzzles ${t.name}'s ${r.name}.`); }
       if (r && act.type === 'disease') { r._dis = 1; r.heat += 1; E.logAdd(g, `${p.name} infects ${t.name}'s ${r.name} — heat ${r.heat}.`); }
+      if (global.__v5) global.__v5[act.type] = (global.__v5[act.type] || 0) + 1;
+      p._actedAttack = true; break;
+    }
+    case 'stink': case 'eartag': {
+      bin(takeCard(act.id));
+      const ok = r => r.prop !== 'no_explode' && (act.type === 'stink' ? !r._stink : (r.prop !== 'no_move' && !r._tag));
+      const r = (ratId && t.rats.find(x => x.id === ratId && ok(x))) || t.rats.find(ok);
+      if (r && E.tryCat(g, t, r)) { E.logAdd(g, `${t.name}'s Cat shields the ${r.name}.`); p._actedAttack = true; break; }
+      if (r && act.type === 'stink') { r._stink = 1; E.logAdd(g, `${p.name} tucks a Stink Bomb under ${t.name}'s ${r.name}.`); }
+      if (r && act.type === 'eartag') { r._tag = 1; E.logAdd(g, `${p.name} clips an Ear Tag on ${t.name}'s ${r.name}.`); }
       if (global.__v5) global.__v5[act.type] = (global.__v5[act.type] || 0) + 1;
       p._actedAttack = true; break;
     }
@@ -987,6 +1021,8 @@ function botTurnV5(g, p) {
         const myBest = p.rats.slice().sort((a, b) => (b.teeth - 8 * b.w) - (a.teeth - 8 * a.w))[0];
         if (fi && myBest && myBest.w <= 1 && myBest.teeth >= 24) { choice = fi; }
         else if (has('copycat') && (foodTotal(p) >= 3 || p.hand.length <= 3)) { choice = has('copycat'); }
+        else if (has('eartag') && has('eartag').targets.includes(lead.id) && E.weight(lead) >= THRESHOLD - 4 && lead.rats.some(r => r.prop !== 'no_explode' && r.prop !== 'no_move' && !r._tag)) { choice = has('eartag'); choice._pick = lead.rats.filter(r => r.prop !== 'no_explode' && r.prop !== 'no_move' && !r._tag).sort((a, b) => b.w - a.w)[0].id; }
+        else if (has('stink') && has('stink').targets.includes(lead.id) && lead.rats.some(r => r.prop !== 'no_explode' && !r._stink)) { choice = has('stink'); choice._pick = lead.rats.find(r => r.prop !== 'no_explode' && !r._stink).id; }
         else if (d && d.targets.includes(lead.id) && dr) { choice = d; choice._pick = dr.id; }
         else if (mz && mz.targets.includes(lead.id) && mr) { choice = mz; choice._pick = mr.id; }
       }

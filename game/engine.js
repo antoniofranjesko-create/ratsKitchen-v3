@@ -52,6 +52,8 @@ const CARDS = {
   wok:         { name: 'Wok Block',       cls: 'defence', desc: process.env.BLOCKSWAP ? 'Reactive. Cancel one attack aimed at you that is not an inspection.' : 'Reactive. Cancel one inspection aimed at you.' },
   boardup:     { name: 'Board Up',        cls: 'defence', desc: 'Your kitchen cannot be attacked for one turn.' },
   food:        { name: 'Food',            cls: 'buff', desc: 'Spend 2 Food to regain 1 star. Or spend 1 to feed a rat.' },
+  stink:       { name: 'Stink Bomb',      cls: 'attack', desc: 'Tuck under a rival\'s rat. It stays with the rat wherever it goes. On Stink Inspection, its owner loses 1 star.' },
+  eartag:      { name: 'Ear Tag',         cls: 'attack', desc: 'Clip onto a rival\'s rat. It stays with the rat wherever it goes. On Pest Control, the rat goes back into the rat deck.' },
   backdoor:    { name: 'Back Door',       cls: 'buff', desc: 'Shuffle one of your rats (and anything tucked under it) back into the rat deck, then take the top rat.' },
   cat:         { name: 'Cat',             cls: 'buff', desc: 'Play on one of your rats (not Fat) to shield it — blocks the next single attack on that rat.' },
   lastresort:  { name: 'Last Resort',     cls: 'buff', desc: 'Eat any one of your rats and regain stars equal to its weight.' },
@@ -143,6 +145,8 @@ function deckConfig(P) {
     actions.fight = process.env.FIGHT ? +(process.env.FIGHTN ?? 3) : 0;
     if (process.env.CUT) for (const k of process.env.CUT.split(',')) actions[k] = 0;
     actions.copycat = process.env.COPY ? +(process.env.COPYN ?? 3) : 0;
+    actions.stink = process.env.MD2 ? +(process.env.STINKN ?? 3) : 0;
+    actions.eartag = process.env.MD2 ? +(process.env.TAGN ?? 3) : 0;
     actions.backdoor = process.env.BACKDOOR ? +(process.env.BACKDOORN ?? 4) : 0;   // 23 Nov: Back Door x4 (on you)
     actions.disease = process.env.NERFS ? +(process.env.DISN ?? 4) : 0;   // Inheritance back x3 (take 2 cards) — locked 21 Nov
     actions.feast = +(process.env.FEAST ?? 4);
@@ -169,7 +173,15 @@ const MARKET_EVENTS = [
   { event: 'roulette',     name: 'Russian Roulette',  desc: 'Everyone antes a card; one Naked Mole Rat is shuffled in and dealt back. Whoever draws it is inspected (-1 star).' },
   { event: 'day_off',      name: "Inspector's Day Off",desc: 'No Health Inspection may be armed this round. Already-armed inspections still fire.' },
 ];
-function buildMarketDeck() { return MARKET_EVENTS.map(e => ({ id: rid(), ...e })); }
+// MD2 (25 Nov, Koko): cut Rat Release, Frenzy, Blackout; add Stink Inspection and Pest Control (they trigger Stink Bombs and Ear Tags)
+const MD2_EVENTS = [
+  { event: 'stink', name: 'Stink Inspection', desc: 'Every player loses 1 star for each Stink Bomb on their rats. The bombs stay.' },
+  { event: 'pest',  name: 'Pest Control',     desc: 'Every rat wearing an Ear Tag goes back into the rat deck (the tag is discarded).' },
+];
+function buildMarketDeck() {
+  const ev = process.env.MD2 ? [...MARKET_EVENTS.filter(e => !['rat_release', 'frenzy', 'blackout'].includes(e.event)), ...MD2_EVENTS] : MARKET_EVENTS;
+  return ev.map(e => ({ id: rid(), ...e }));
+}
 
 function rid() { return Math.random().toString(36).slice(2, 9); }
 
@@ -375,6 +387,8 @@ function newGame(playerDefs) {
   for (const c of setAside) g.deck.push(c);
   shuffle(g.deck);
   refillAlley(g);
+  // STARTRATS (test lever): each player starts with N rats from the rat deck
+  for (let k = 0; k < +(process.env.STARTRATS || 0); k++) for (const q of g.players) { const b = takeFromAlley(g, null); if (b) q.rats.push(b.rat); }
   logAdd(g, `Game start — ${P} players, first to weight ${THRESHOLD} wins.`);
   return g;
 }
@@ -449,7 +463,7 @@ function refillAlley(g) {
     if (idx < 0) break;                       // bins exhausted
     const got = g.bins.splice(idx, 1)[0];
     if (got.rat && got.rat.kind === 'hog') got.rat.w = 1;
-    if (got.rat) { got.rat._chilliBy = null; got.rat._catShield = false; }   // placed cards (Hot Chilli, Cat) are discarded when a rat leaves play
+    if (got.rat) { got.rat._chilliBy = null; got.rat._catShield = false; got.rat._stink = 0; got.rat._tag = 0; }   // placed cards (Hot Chilli, Cat) are discarded when a rat leaves play
     if (got.rat && got.rat._muzzled) { got.rat.prop = got.rat._muzzled; got.rat._muzzled = null; }   // tucked nerfs are discarded when a rat leaves play
     if (got.rat && got.rat._dis) { got.rat.heat -= got.rat._dis; got.rat._dis = 0; }   // fed food is discarded when a Hog leaves play
     g.alley.push(got);

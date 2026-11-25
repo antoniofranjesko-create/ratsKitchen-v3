@@ -32,6 +32,8 @@ add(3, { key: 'klepto', side: 'rival', title: 'Kleptomaniac', icon: '🧤', text
 add(4, { key: 'quente', side: 'rival', title: 'Ratata Quente', icon: '🌡️', text: 'Dump one of <b>your</b> rats into a rival\'s kitchen.' });
 add(4, { key: 'hotratato', side: 'rival', title: 'Hot Ratato', icon: '🥔', stats: [0, 1, null], text: 'Throw this junk rat into a rival\'s kitchen, where it stays as a rat (weight 0, heat 1, no breed).' });
 add(3, { key: 'muzzle', side: 'rival', title: 'Muzzle', icon: '🤐', text: 'Tuck under a rival\'s rat: it <b>loses its ability</b> while the Muzzle stays.' });
+add(3, { key: 'stink', side: 'rival', title: 'Stink Bomb', icon: '💨', text: 'Tuck under a rival\'s rat. It stays with the rat wherever it goes. On <b>Stink Inspection</b>, its owner loses <b>1 star</b>.' });
+add(3, { key: 'eartag', side: 'rival', title: 'Ear Tag', icon: '🏷️', text: 'Clip onto a rival\'s rat. It stays with the rat wherever it goes. On <b>Pest Control</b>, the rat goes back into the rat deck.' });
 add(4, { key: 'disease', side: 'rival', title: 'Disease', icon: '🦠', text: 'Tuck under a rival\'s rat: <b>+1 heat</b>.' });
 add(4, { key: 'chilli', side: 'rival', title: 'Hot Chilli', icon: '🌶️', text: 'Place on a rival\'s rat. At the start of <b>their</b> next turn it goes off: the rat goes back into the rat deck.' });
 add(3, { key: 'territorial', side: 'rival', title: 'Territorial', icon: '🚧', text: 'Place on a rival\'s kitchen: it <b>can\'t receive rats</b> until the end of their next turn. They discard it then.' });
@@ -47,9 +49,8 @@ add(3, { key: 'wok', side: 'react', title: 'Wok Block', icon: '🍳', text: 'On 
 // ---------- other poker cards ----------
 const P2 = [];
 const day = (key, title, text, icon) => P2.push({ key, side: 'day', title, icon, text });
-day('day_release', 'Rat Release', 'The player with the <b>fewest rats</b> takes the top rat of the rat deck. Tie: fewest cards. Still tied: they all draw a market card instead.', '🐀');
-day('day_frenzy', 'Frenzy', 'Everyone draws a market card.', '🎉');
-day('day_blackout', 'Blackout', 'Everyone discards a card.', '🌑');
+day('day_stink', 'Stink Inspection', 'Every player loses <b>1 star</b> for each Stink Bomb on their rats. The bombs stay.', '💨');
+day('day_pest', 'Pest Control', 'Every rat wearing an <b>Ear Tag</b> goes back into the rat deck; discard the tag.', '🏷️');
 day('day_piper', 'Pied Piper', 'Everyone secretly picks one of their own rats, then all pass them left at once.', '🪈');
 day('day_roulette', 'Russian Roulette', 'Everyone puts 1 card face-down. Shuffle in the spare Mole, deal one back to each player, bin the leftover unseen. Whoever gets the Mole is inspected (−1 star).', '🎲');
 day('day_dayoff', "Inspector's Day Off", 'No inspection can be armed this round. Already-armed ones still fire.', '🏖️');
@@ -148,7 +149,7 @@ i.v{position:absolute;width:0;height:5mm;border-left:.2mm solid #000}i.h{positio
 .mini{padding:0 2.2mm 1.6mm;border-top:0}.mband{margin:0 -2.2mm;background:var(--c);color:#fff;font:600 7pt Poppins,sans-serif;padding:1mm 2.2mm;display:flex;justify-content:space-between;align-items:center}
 .mband span:last-child{font-family:'Noto Color Emoji',Poppins;font-size:7pt}.mini .art{margin:1.2mm 0 .8mm}.mnest{font:600 6pt Poppins,sans-serif;color:var(--c);margin-bottom:.8mm}
 .stats.m .sv{font-size:9.5pt}.mtext{font-size:7.2pt;line-height:1.2}.mtext.big{font-size:7.6pt}
-.rules{padding:12mm 13mm}.rcols{columns:2;column-gap:7mm;font-size:8.4pt;line-height:1.32}.rcols h1{column-span:all;font:600 16pt Poppins,sans-serif;margin:0 0 2mm}.rcols h2{font:600 10.5pt Poppins,sans-serif;margin:3mm 0 1mm;color:#b8322a;break-after:avoid}.rcols p,.rcols li{margin:0 0 1.2mm}.rcols ol,.rcols ul{margin:0 0 1.5mm;padding-left:4.5mm}.rcols ul ul{margin-top:.8mm}.tag{text-align:center;margin-top:3mm!important}
+.rules{padding:12mm 13mm}.rcols{columns:2;column-gap:7mm;font-size:8.1pt;line-height:1.3}.rcols h1{column-span:all;font:600 16pt Poppins,sans-serif;margin:0 0 2mm}.rcols h2{font:600 10.2pt Poppins,sans-serif;margin:2.4mm 0 .8mm;color:#b8322a;break-after:avoid}.rcols p,.rcols li{margin:0 0 1.2mm}.rcols ol,.rcols ul{margin:0 0 1.5mm;padding-left:4.5mm}.rcols ul ul{margin-top:.8mm}.tag{text-align:center;margin-top:3mm!important}
 .ref{font-size:7.9pt;line-height:1.26;padding-left:4mm;margin:1.2mm 0}.ref li{margin-bottom:.5mm}.small{font-size:7pt;line-height:1.25;color:#333}`;
 
 // ---------- full instructions (last pages) ----------
@@ -159,13 +160,13 @@ const RULES = `<section class="page rules"><div class="rcols">
 <p><b>Rat King:</b> start your own turn with <b>10 or more rat weight</b> in your kitchen. Reaching 10 isn't enough on its own: you must still hold it when your next turn begins, so everyone gets one round to knock you down.<br>
 <b>Last stall standing:</b> every other stall has been shut down.</p>
 <h2>Components</h2>
-<p>Market deck: 81 cards + 4 Hot Ratato · Rat deck: 37 rats · Market Day: 6 cards + 1 spare Mole · Food pile: 27 Food cards · 6 reference cards. <b>Also needed:</b> star tokens (coins or beads; up to 7 per player) and a first-player marker.</p>
+<p>Market deck: 87 cards + 4 Hot Ratato · Rat deck: 37 rats · Market Day: 5 cards + 1 spare Mole · Food pile: 27 Food cards · 6 reference cards. <b>Also needed:</b> star tokens (coins or beads; up to 7 per player) and a first-player marker.</p>
 <h2>Setup</h2>
 <ol><li>Shuffle the <b>market deck</b> and the <b>rat deck</b> separately, side by side.</li>
 <li>Each player takes stars: <b>${STARS}</b>.</li>
 <li>Each player takes a reference card and <b>2 Food</b>.</li>
 <li>Deal each player <b>6 market cards</b>. Any Snap Inspection or Hot Ratato dealt is set aside and shuffled back in afterwards.</li>
-<li>Put the <b>Market Day</b> cards in a face-up pile, the spare Mole beside it, and the Food pile in the middle.</li>
+<li>Shuffle the <b>Market Day</b> cards into a <b>face-down</b> pile, with the spare Mole beside it. Put the Food pile in the middle.</li>
 <li>Give the starting player the first-player marker. Play passes left.</li></ol>
 <h2>The table</h2>
 <ul><li><b>Your kitchen</b> (your rats and anything on them) is public. <b>Your hand</b> is secret. There is <b>no hand limit</b>.</li>
@@ -187,7 +188,8 @@ const RULES = `<section class="page rules"><div class="rcols">
 <p><b>Free at any point in your turn:</b> fire an inspection you armed last turn; feed rats (each rat once per turn). <b>Healing</b> (3 Food for 1 star) counts as your Defend card.</p>
 <p><b>Reactions</b> are played free on someone else's turn: <b>Grease the Palm</b> cancels an inspection aimed at you; <b>Wok Block</b> cancels any other attack aimed at you.</p>
 <p><b>Three of a kind:</b> the first time you hold 3 rats of the same breed, take 1 Food, then turn your reference card over. Once per game.</p>
-<p><b>A round</b> is one pass round the table. At the start of each round, flip the next <b>Market Day</b>; it lasts that round.</p>
+<p><b>A round</b> is one pass round the table. At the start of each round, flip the top <b>Market Day</b> (nobody knows what's next); it lasts that round. When the pile runs out, shuffle it.</p>
+<p><b>Cards on rats</b> (Muzzle, Disease, Stink Bomb, Ear Tag, Cat, Hot Chilli) stay with the rat wherever it goes: poached, dumped, passed. When the rat goes back into the rat deck, they're discarded. Stink Bombs cost a star on <b>Stink Inspection</b>; Ear-Tagged rats go back to the rat deck on <b>Pest Control</b>. Spice Rats can't take them; Feral Rats can't be tagged.</p>
 <h2>Rats</h2>
 <p>Every rat has a <b>breed</b>, a <b>weight</b> (counts towards Rat King), a <b>heat</b> (damage when its breed is inspected) and <b>Teeth</b> (for Scrap Fights; every rat has a different number, so fights never tie). Some have an ability.<br>
 <b>Feeding:</b> pay the Food shown to use a Feed ability. Each rat can be fed once per turn: turn it sideways, and straighten it at the start of your next turn.</p>

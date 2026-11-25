@@ -1,7 +1,7 @@
 // ── LONG MODE (branch long-mode): this server runs long mode v1 by default ──
 // Any of these can still be overridden with an environment variable.
 const LONG_DEFAULTS = { V5: '1', V5TURN: 'side', IMM: '2', FOODINC: 'NONE', NOFOODCARDS: '1', HEALCOST: '3', THRESH: '10',
-  STARSBYP: '7,6,5,4', KIND3: '1', FOODCARD: '1', FOODSTART: '2', FOODOPT: '1', PLAYCAP: '2', SHEET: '1', NERFS: '1', FIGHT: '1', FIGHTCH: '1', FIGHTN: '2', CUT: 'exterm,gambit', BLOCKSWAP: '1', CATFAT: '1', TARGETTIMING: '1', NOBOILER: '1', BACKDOOR: '1', NOHANDLIMIT: '1' };
+  STARSBYP: '7,6,5,4', KIND3: '1', FOODCARD: '1', FOODSTART: '2', FOODOPT: '1', PLAYCAP: '2', SHEET: '1', NERFS: '1', FIGHT: '1', FIGHTCH: '1', FIGHTN: '2', CUT: 'exterm,gambit', BLOCKSWAP: '1', CATFAT: '1', TARGETTIMING: '1', NOBOILER: '1', BACKDOOR: '1', NOHANDLIMIT: '1', MD2: '1' };
 for (const [k, v] of Object.entries(LONG_DEFAULTS)) if (process.env[k] === undefined) process.env[k] = v;
 // RAT'S KITCHEN v3 — SERVER
 'use strict';
@@ -73,7 +73,7 @@ function project(g, viewerId, room) {
       connected: p.bot || !!(seat(p.id) && seat(p.id).connected),
       stars: p.stars, maxStars: p.maxStars || E.STARS, food: p.food || 0, weight: E.weight(p), heat: E.heat(p), count: p.rats.length,
       // rats are public (zones are public) — show kind + colour, no ids to others
-      rats: p.rats.map(r => ({ id: r.id, kind: r.kind, name: r.name, w: r.w, heat: r.heat, col: r.col, cols: r.cols||null, prop: r.prop || r._muzzled || null, teeth: r.teeth || 0, muzzled: !!r._muzzled, diseased: !!r._dis, desc: (E.RATS[r.kind]&&E.RATS[r.kind].desc)||"", shielded: !!r._catShield, chilli: !!r._chilliBy })),
+      rats: p.rats.map(r => ({ id: r.id, kind: r.kind, name: r.name, w: r.w, heat: r.heat, col: r.col, cols: r.cols||null, prop: r.prop || r._muzzled || null, teeth: r.teeth || 0, muzzled: !!r._muzzled, diseased: !!r._dis, stink: !!r._stink, tagged: !!r._tag, desc: (E.RATS[r.kind]&&E.RATS[r.kind].desc)||"", shielded: !!r._catShield, chilli: !!r._chilliBy })),
       armed: p.armed ? { cap: p.armed.cap, ready: p.armed.age >= 1, cols: (p.id === viewerId ? (p.armed.cols||null) : null) } : null,
       boardup: p.boardup, territorial: p.territorial,
       // Layer 3: cards sitting ON this kitchen, with who played them (for the layered display)
@@ -394,7 +394,7 @@ io.on('connection', (socket) => {
   });
 });
 
-const VERSION = 'L1.6';
+const VERSION = 'L1.7';
 app.get('/version', (req, res) => res.json({ version: VERSION }));
 
 // ---- /art: phone page that makes the card art (Pollinations, free) and lays out the print sheets ----
