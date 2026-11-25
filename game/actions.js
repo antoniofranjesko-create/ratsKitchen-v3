@@ -288,14 +288,14 @@ function payFood(g, p, n) {
 //   V5TURN=one  : play 1 card | take a rat | draw a card
 //   V5TURN=ad   : play 1 attack and/or 1 defence | take a rat | draw a card
 //   V5TURN=plus : play 1 card AND then take a rat or draw a card
-const V5FREE = { fire: 1, feed: 1, breed: 1, end: 1, fire_wait: 1, fire_blocked: 1, v5rat: 1, v5card: 1, v5food: 1 };
+const V5FREE = { ...(process.env.CLEANFREE ? { food_clean: 1 } : {}), fire: 1, feed: 1, breed: 1, end: 1, fire_wait: 1, fire_blocked: 1, v5rat: 1, v5card: 1, v5food: 1 };
 const V5DEF = { food_heal: 1, eat_lastresort: 1, boardup: 1, cat: 1, gambit: 1, copycat: 1, backdoor: 1 };
 // ARMDEF: arming an inspection names no rival yet, so it counts as a card on yourself
 if (process.env.ARMDEF) { V5DEF.sched1 = 1; V5DEF.sched2 = 1; }
 // cat3 (22 Nov): three printed card types; a turn plays up to N cards (room setting), each of a different type
 const CAT3 = {
   att: ['mole', 'sched1', 'sched2', 'poach', 'fight', 'klepto', 'hotratato', 'play_ratato'],
-  def: ['boardup', 'eat_lastresort', 'food_heal', 'backdoor'],
+  def: ['boardup', 'eat_lastresort', 'food_heal', 'food_clean', 'backdoor'],
   nb:  ['cat', 'muzzle', 'disease', 'stink', 'eartag', 'chilli', 'territorial', 'inherit', 'delivery'],
 };
 function cat3Of(type) { for (const k in CAT3) if (CAT3[k].includes(type)) return k; return 'att'; }
@@ -475,6 +475,10 @@ function legalActions(g, p) {
   // 2 Food -> 1 star
   if (!capped && foodTotal(p) >= HEALCOST && p.stars < (p.maxStars || E.STARS))
     push({ type: 'food_heal', label: `Spend ${HEALCOST} Food (+1 star)` });
+  // CLEAN (test lever): pay Food to strip rivals' cards (Muzzle, Disease, Stink Bomb, Ear Tag, Hot Chilli) off one of your rats
+  const NERFED = r => r._muzzled || r._dis || r._stink || r._tag || r._chilliBy;
+  if (process.env.CLEAN && !capped && foodTotal(p) >= +process.env.CLEAN && p.rats.some(NERFED))
+    push({ type: 'food_clean', needsRat: true, label: `Spend ${process.env.CLEAN} Food: clean a rat (remove rivals' cards from it)` });
   // card food costs (test lever)
   for (let i = acts.length - 1; i >= 0; i--) if (COSTLY[acts[i].type] && foodTotal(p) < COSTLY[acts[i].type]) acts.splice(i, 1);
   // Last Resort still eats any rat for stars = weight
@@ -619,6 +623,15 @@ function apply0(g, p, act, targetId, ratId) {
       if (global.__v5) global.__v5.heal = (global.__v5.heal || 0) + 1;
       p.stars = Math.min((p.maxStars || E.STARS), p.stars + 1); p._actedBuild = true;
       E.logAdd(g, `${p.name} spends 2 Food for a star.`); break;
+    }
+    case 'food_clean': {
+      const r = p.rats.find(x => x.id === ratId) || p.rats.find(x => x._muzzled || x._dis || x._stink || x._tag || x._chilliBy); if (!r) break;
+      if (!payFood(g, p, +process.env.CLEAN)) break;
+      if (r._muzzled) { r.prop = r._muzzled; r._muzzled = null; }
+      if (r._dis) { r.heat -= 1; r._dis = 0; }
+      r._stink = 0; r._tag = 0; r._chilliBy = null;
+      if (global.__v5) global.__v5.clean = (global.__v5.clean || 0) + 1;
+      E.logAdd(g, `${p.name} cleans up the ${r.name}.`); break;
     }
     case 'eat_lastresort': {
       const r = p.rats.find(x => x.id === ratId); if (!r) break;
@@ -1000,7 +1013,8 @@ function botTurnV5(g, p) {
     if (choice && choice.type === 'end') choice = null;
     if (!choice) {
       // urgent defence
-      if (threat >= p.stars || p.stars <= 2) choice = has('food_heal') || (p.stars <= 2 && has('eat_lastresort')) || (threat >= p.stars && has('boardup'));
+      if (!choice && has('food_clean')) { const nr = p.rats.find(r => r._tag || r._chilliBy) || p.rats.find(r => r._stink || r._dis) || p.rats.find(r => r._muzzled); if (nr && (nr._tag || nr._chilliBy || nr._stink || foodTotal(p) >= 4)) { choice = has('food_clean'); choice._own = nr.id; } }
+      if (threat >= p.stars || p.stars <= 2) choice = choice || has('food_heal') || (p.stars <= 2 && has('eat_lastresort')) || (threat >= p.stars && has('boardup'));
       // stop a rival on (or near) Rat King weight
       if (!choice && lead && E.weight(lead) >= THRESHOLD - 1)
         for (const t of ['poach', 'chilli', 'hotratato', 'exterm', 'mole', 'territorial', 'sched2', 'sched1', 'play_ratato'])
