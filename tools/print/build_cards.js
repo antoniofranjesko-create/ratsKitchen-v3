@@ -3,6 +3,7 @@
 // Art: drop an image named <key>.png / .jpg / .webp into tools/print/art/ (keys printed on each placeholder), then rerun.
 // Usage: node tools/print/build_cards.js   -> tools/print/out/cards.html + cards.pdf
 const fs = require('fs'), path = require('path');
+const { art } = require('./art');
 const ART = path.join(__dirname, 'art'), OUT = path.join(__dirname, 'out');
 fs.mkdirSync(OUT, { recursive: true }); fs.mkdirSync(ART, { recursive: true });
 
@@ -82,7 +83,8 @@ for (let i = 0; i < 6; i++) MINI.push({ key: 'kind3', side: 'token', title: 'Thr
 // ---------- rendering ----------
 const artFor = key => { for (const ext of ['png', 'jpg', 'jpeg', 'webp']) { const f = path.join(ART, `${key}.${ext}`); if (fs.existsSync(f)) return 'file://' + f; } return null; };
 const nestBadge = n => `<span class="nest" style="background:${NEST[n][2]}">${NEST[n][0]} ${NEST[n][1]}</span>`;
-const artBox = (c, h) => { const a = artFor(c.key);
+const artBox = (c, h) => { const a = artFor(c.key + (c.breed ? '_' + c.breed : '')) || artFor(c.key), v = a ? null : art(c.key, { breed: c.breed });
+  if (v) return `<div class="art vec" style="height:${h}mm">${v}</div>`;
   return a ? `<div class="art" style="height:${h}mm;background-image:url('${a}')"></div>`
     : `<div class="art ph" style="height:${h}mm"><span class="emo">${c.icon || '🐀'}</span><span class="artkey">art: ${c.key}</span></div>`; };
 
@@ -104,7 +106,7 @@ function mini(c) {
   if (c.rat) {
     const col = c.nest ? NEST[c.nest][2] : '#6b6b6b';
     return `<div class="card mini" style="--c:${col}"><div class="mband"><span>${c.title}</span><span>${c.nest ? NEST[c.nest][0] : '🚫'}</span></div>
-      ${artBox({ key: c.key, icon: '🐀' }, 20)}<div class="mnest">${c.nest ? NEST[c.nest][1] : 'No breed'}</div>
+      ${artBox({ key: c.key, icon: '🐀', breed: c.nest }, 20)}<div class="mnest">${c.nest ? NEST[c.nest][1] : 'No breed'}</div>
       <div class="stats m">${stat('Weight', c.w)}${stat('Heat', c.h)}${stat('Teeth', c.teeth)}</div><div class="mtext">${c.text}</div></div>`;
   }
   const [label, col] = SIDE[c.side];
@@ -133,7 +135,7 @@ i.v{position:absolute;width:0;height:5mm;border-left:.2mm solid #000}i.h{positio
 .poker{padding:0 3.2mm 2.2mm;border-top:0}.band{margin:0 -3.2mm;background:var(--c);color:#fff;font:600 6.8pt Poppins,sans-serif;letter-spacing:.08em;text-transform:uppercase;padding:1.2mm 3.2mm}
 .title{font:600 11pt/1.1 Poppins,sans-serif;margin-top:1.6mm}.sub{font-size:6.8pt;color:#666;margin-top:.3mm}
 .art{margin:1.6mm 0 1.2mm;border-radius:1.5mm;background-size:cover;background-position:center;border:.3mm solid var(--c)}
-.ph{display:flex;flex-direction:column;align-items:center;justify-content:center;background:repeating-linear-gradient(45deg,#fafafa 0 2mm,#f1f1f1 2mm 4mm)}
+.vec{overflow:hidden;line-height:0}.vec svg{display:block}.ph{display:flex;flex-direction:column;align-items:center;justify-content:center;background:repeating-linear-gradient(45deg,#fafafa 0 2mm,#f1f1f1 2mm 4mm)}
 .emo{font-family:'Noto Color Emoji';font-size:28pt;line-height:1}.mini .emo{font-size:15pt}.artkey{font-size:5pt;color:#aaa;margin-top:.8mm}
 .nests{display:flex;align-items:center;gap:1mm;margin-bottom:1.2mm}.nest{color:#fff;border-radius:1mm;padding:.5mm 1.5mm;font:600 7pt Poppins,sans-serif}.or{font-size:6.5pt;color:#666}
 .text{font-size:8pt;line-height:1.3;flex:1}.foot{font-size:5pt;color:#aaa;text-align:right}
