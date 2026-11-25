@@ -148,6 +148,8 @@ function deckConfig(P) {
     actions.stink = process.env.MD2 ? +(process.env.STINKN ?? 3) : 0;
     actions.eartag = process.env.MD2 ? +(process.env.TAGN ?? 3) : 0;
     actions.backdoor = process.env.BACKDOOR ? +(process.env.BACKDOORN ?? 4) : 0;   // 23 Nov: Back Door x4 (on you)
+    // DECKADJ (test lever): 'cat:5,grease:5' sets copy counts
+    for (const kv of (process.env.DECKADJ || '').split(',').filter(Boolean)) { const [k, n] = kv.split(':'); actions[k] = +n; }
     actions.disease = process.env.NERFS ? +(process.env.DISN ?? 4) : 0;   // Inheritance back x3 (take 2 cards) — locked 21 Nov
     actions.feast = +(process.env.FEAST ?? 4);
     if (process.env.NOFOODCARDS) { actions.food = 0; actions.feast = 0; }
@@ -398,7 +400,7 @@ function drawCard(g) {
     // Reshuffle: all spent cards from the discard, PLUS a fixed number of rats
     // pulled from the bins (lower density each cycle — rats grow scarce late game).
     const newDeck = g.discard.splice(0);
-    const n = g.reshuffleRats || 7;
+    const n = g.reshuffleRats ?? 7;   // was '|| 7', which put 7 rats into the market deck at every long-mode reshuffle (reshuffleRats 0)
     // Take the top N rats off the bins, whatever type they are — no sorting.
     // (The deck already contains ability rats, so filtering by type served no
     // purpose and forced a manual sort at a physical table.)
