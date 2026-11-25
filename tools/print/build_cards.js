@@ -13,7 +13,7 @@ const SIDE = {
   react: ['Reaction · free', '#2b62a0'], snap: ['Fires when drawn', '#7d4a1e'], day: ['Market Day', '#5b5b5b'],
   ref: ['Reference', '#333'], food: ['Pile', '#4f8a2e'], token: ['Token', '#555'],
 };
-const STARS = '3 players 7 · 4 players 6 · 5 players 5 · 6 players 4';
+const STARS = '6 each';
 
 // ---------- market deck (81 + 4 Hot Ratato) ----------
 const M = [];
@@ -33,18 +33,19 @@ add(4, { key: 'quente', side: 'rival', title: 'Ratata Quente', icon: '🌡️', 
 add(4, { key: 'hotratato', side: 'rival', title: 'Hot Ratato', icon: '🥔', stats: [0, 1, null], text: 'Throw this junk rat into a rival\'s kitchen, where it stays as a rat (weight 0, heat 1, no breed).' });
 add(3, { key: 'muzzle', side: 'rival', title: 'Muzzle', icon: '🤐', text: 'Tuck under a rival\'s rat: it <b>loses its ability</b> while the Muzzle stays.' });
 add(3, { key: 'stink', side: 'rival', title: 'Stink Bomb', icon: '💨', text: 'Tuck under a rival\'s rat. It stays with the rat wherever it goes. On <b>Stink Inspection</b>, its owner loses <b>1 star</b>.' });
-add(3, { key: 'eartag', side: 'rival', title: 'Ear Tag', icon: '🏷️', text: 'Clip onto a rival\'s rat. It stays with the rat wherever it goes. On <b>Pest Control</b>, the rat goes back into the rat deck.' });
+add(2, { key: 'eartag', side: 'rival', title: 'Ear Tag', icon: '🏷️', text: 'Clip onto a rival\'s rat. It stays with the rat wherever it goes. On <b>Pest Control</b>, the rat goes back into the rat deck.' });
 add(4, { key: 'disease', side: 'rival', title: 'Disease', icon: '🦠', text: 'Tuck under a rival\'s rat: <b>+1 heat</b>.' });
 add(4, { key: 'chilli', side: 'rival', title: 'Hot Chilli', icon: '🌶️', text: 'Place on a rival\'s rat. At the start of <b>their</b> next turn it goes off: the rat goes back into the rat deck.' });
 add(3, { key: 'territorial', side: 'rival', title: 'Territorial', icon: '🚧', text: 'Place on a rival\'s kitchen: it <b>can\'t receive rats</b> until the end of their next turn. They discard it then.' });
 add(3, { key: 'inherit', side: 'rival', title: 'Inheritance', icon: '📜', text: 'Place on a rival. If they\'re shut down, <b>take 2 of their cards</b> first.' });
-add(4, { key: 'boardup', side: 'you', title: 'Board Up', icon: '🔨', text: 'Your kitchen <b>can\'t be attacked</b> until your next turn.' });
-add(4, { key: 'lastresort', side: 'you', title: 'Last Resort', icon: '🍽️', text: 'Put one of your rats back into the rat deck; <b>regain stars</b> equal to its weight.' });
-add(4, { key: 'backdoor', side: 'you', title: 'Back Door', icon: '🚪', text: 'Shuffle one of your rats (and anything tucked under it) back into the rat deck, then <b>take the top rat</b>. Not while a Territorial is on you.' });
-add(3, { key: 'cat', side: 'you', title: 'Cat', icon: '🐱', text: 'Place on one of your rats: it\'s <b>shielded</b> from the next card aimed at it.' });
+add(5, { key: 'boardup', side: 'you', title: 'Board Up', icon: '🔨', text: 'Your kitchen <b>can\'t be attacked</b> until your next turn.' });
+add(5, { key: 'lastresort', side: 'you', title: 'Last Resort', icon: '🍽️', text: 'Put one of your rats back into the rat deck; <b>regain stars</b> equal to its weight.' });
+add(5, { key: 'backdoor', side: 'you', title: 'Back Door', icon: '🚪', text: 'Shuffle one of your rats (and anything tucked under it) back into the rat deck, then <b>take the top rat</b>. Not while a Territorial is on you.' });
+add(5, { key: 'cat', side: 'you', title: 'Cat', icon: '🐱', text: 'Place on one of your rats: it\'s <b>shielded</b> from the next card aimed at it.' });
+add(2, { key: 'deepclean', side: 'you', title: 'Deep Clean', icon: '🧽', text: 'Discard <b>every card rivals have put</b> on your rats and kitchen: Muzzle, Disease, Stink Bomb, Ear Tag, Hot Chilli, Territorial.' });
 add(6, { key: 'delivery', side: 'either', title: 'Special Delivery', icon: '🚚', text: 'Put the top rat of the rat deck into <b>any</b> kitchen. Counts as Attack or Defend, by where it goes.' });
-add(3, { key: 'grease', side: 'react', title: 'Grease the Palm', icon: '💰', text: 'On another player\'s turn: <b>cancel one inspection</b> aimed at you.' });
-add(3, { key: 'wok', side: 'react', title: 'Wok Block', icon: '🍳', text: 'On another player\'s turn: <b>cancel any other attack</b> aimed at you.' });
+add(5, { key: 'grease', side: 'react', title: 'Grease the Palm', icon: '💰', text: 'On another player\'s turn: <b>cancel one inspection</b> aimed at you.' });
+add(5, { key: 'wok', side: 'react', title: 'Wok Block', icon: '🍳', text: 'On another player\'s turn: <b>cancel any other attack</b> aimed at you.' });
 
 // ---------- other poker cards ----------
 const P2 = [];
@@ -99,7 +100,7 @@ function poker(c) {
     <li><b>Draw 1</b> market card.</li>
     <li><b>One choice:</b> play up to 2 cards (<span style="color:${SIDE.rival[1]}">1 Attack</span> + <span style="color:${SIDE.you[1]}">1 Defend</span>) · or take the top rat · or draw another card · or take 1 Food.</li>
     <li><b>End:</b> a Territorial on you ends.</li></ol>
-    <div class="small"><b>Free on your turn:</b> fire your armed inspection; feed rats (each once). <b>Heal:</b> 3 Food = 1 star (your Defend card).<br>
+    <div class="small"><b>Free on your turn:</b> fire your armed inspection; feed rats (each once).<br>
     <b>Three of a kind:</b> first time you hold 3 rats of one breed, take 1 Food, then turn this card over (once per game).<br><b>Stars:</b> ${STARS}.</div></div>`;
   const nests = c.nests ? `<div class="nests">${c.nests.map(nestBadge).join(c.nests.length > 1 ? '<span class="or">or</span>' : '')}</div>` : '';
   const stats = c.stats ? `<div class="stats">${stat('Weight', c.stats[0])}${stat('Heat', c.stats[1])}</div>` : '';
@@ -115,7 +116,7 @@ function mini(c) {
       <div class="stats m">${stat('Weight', c.w)}${stat('Heat', c.h)}${stat('Teeth', c.teeth)}</div><div class="mtext">${c.text}</div></div>`;
   }
   const [label, col] = SIDE[c.side];
-  const body = c.food ? 'Spend for <b>feeding</b> rats, or <b>3 Food = 1 star</b>. Spent Food goes back to the Food pile.'
+  const body = c.food ? 'Spend on <b>feeding</b> rats (and the Alpha Rat\'s guard). Spent Food goes back to the Food pile.'
     : 'The first time you hold <b>3 rats of one breed</b>, hand this in and take 1 Food. Once per game.';
   return `<div class="card mini" style="--c:${col}"><div class="mband"><span>${c.title}</span><span>${label}</span></div>${artBox(c, 24)}<div class="mtext big">${body}</div></div>`;
 }
@@ -160,7 +161,7 @@ const RULES = `<section class="page rules"><div class="rcols">
 <p><b>Rat King:</b> start your own turn with <b>10 or more rat weight</b> in your kitchen. Reaching 10 isn't enough on its own: you must still hold it when your next turn begins, so everyone gets one round to knock you down.<br>
 <b>Last stall standing:</b> every other stall has been shut down.</p>
 <h2>Components</h2>
-<p>Market deck: 87 cards + 4 Hot Ratato · Rat deck: 37 rats · Market Day: 5 cards + 1 spare Mole · Food pile: 27 Food cards · 6 reference cards. <b>Also needed:</b> star tokens (coins or beads; up to 7 per player) and a first-player marker.</p>
+<p>Market deck: 97 cards + 4 Hot Ratato · Rat deck: 37 rats · Market Day: 5 cards + 1 spare Mole · Food pile: 27 Food cards · 6 reference cards. <b>Also needed:</b> star tokens (coins or beads; 6 per player) and a first-player marker.</p>
 <h2>Setup</h2>
 <ol><li>Shuffle the <b>market deck</b> and the <b>rat deck</b> separately, side by side.</li>
 <li>Each player takes stars: <b>${STARS}</b>.</li>
@@ -185,11 +186,11 @@ const RULES = `<section class="page rules"><div class="rcols">
  <li><b>Draw</b> another market card.</li>
  <li><b>Take 1 Food</b> from the Food pile.</li></ul></li>
 <li><b>End:</b> a Territorial on your kitchen ends; discard it.</li></ol>
-<p><b>Free at any point in your turn:</b> fire an inspection you armed last turn; feed rats (each rat once per turn). <b>Healing</b> (3 Food for 1 star) counts as your Defend card.</p>
+<p><b>Free at any point in your turn:</b> fire an inspection you armed last turn; feed rats (each rat once per turn). There is no healing: Last Resort is the only way to win stars back.</p>
 <p><b>Reactions</b> are played free on someone else's turn: <b>Grease the Palm</b> cancels an inspection aimed at you; <b>Wok Block</b> cancels any other attack aimed at you.</p>
 <p><b>Three of a kind:</b> the first time you hold 3 rats of the same breed, take 1 Food, then turn your reference card over. Once per game.</p>
 <p><b>A round</b> is one pass round the table. At the start of each round, flip the top <b>Market Day</b> (nobody knows what's next); it lasts that round. When the pile runs out, shuffle it.</p>
-<p><b>Cards on rats</b> (Muzzle, Disease, Stink Bomb, Ear Tag, Cat, Hot Chilli) stay with the rat wherever it goes: poached, dumped, passed. When the rat goes back into the rat deck, they're discarded. Stink Bombs cost a star on <b>Stink Inspection</b>; Ear-Tagged rats go back to the rat deck on <b>Pest Control</b>. Spice Rats can't take them; Feral Rats can't be tagged.</p>
+<p><b>Cards on rats</b> (Muzzle, Disease, Stink Bomb, Ear Tag, Cat, Hot Chilli) stay with the rat wherever it goes: poached, dumped, passed. When the rat goes back into the rat deck, they're discarded. Stink Bombs cost a star on <b>Stink Inspection</b>; Ear-Tagged rats go back to the rat deck on <b>Pest Control</b>. Spice Rats can't take them; Feral Rats can't be tagged. <b>Deep Clean</b> clears every one of them from your kitchen.</p>
 <h2>Rats</h2>
 <p>Every rat has a <b>breed</b>, a <b>weight</b> (counts towards Rat King), a <b>heat</b> (damage when its breed is inspected) and <b>Teeth</b> (for Scrap Fights; every rat has a different number, so fights never tie). Some have an ability.<br>
 <b>Feeding:</b> pay the Food shown to use a Feed ability. Each rat can be fed once per turn: turn it sideways, and straighten it at the start of your next turn.</p>

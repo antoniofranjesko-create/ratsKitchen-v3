@@ -48,7 +48,7 @@ function project(g, viewerId, room) {
   const seat = id => room && room.players.find(x => x.id === id);
   return {
     over: g.over, winner: g.winner, active: g.players[g.active] && g.players[g.active].id,
-    turn: g.turn, threshold: E.THRESHOLD, maxStars: E.STARS, longMode: !!process.env.V5, v5turn: process.env.V5TURN || '', foodCards: !!process.env.FOODCARD, playCap: g.playCap || 2, closedCards: (g.closed || []).length, anyElim: g._firstElimTurn != null, log: g.log.slice(-40),
+    turn: g.turn, threshold: E.THRESHOLD, maxStars: E.STARS, longMode: !!process.env.V5, healOff: +(process.env.HEALCOST || 3) > 50, v5turn: process.env.V5TURN || '', foodCards: !!process.env.FOODCARD, playCap: g.playCap || 2, closedCards: (g.closed || []).length, anyElim: g._firstElimTurn != null, log: g.log.slice(-40),
     lastPlayed: g.lastPlayed || null,
     awaitingStep: (() => {
       // a step is available when the game isn't over, it's a bot's turn coming up,
@@ -394,7 +394,7 @@ io.on('connection', (socket) => {
   });
 });
 
-const VERSION = 'L1.7';
+const VERSION = 'L1.8';
 app.get('/version', (req, res) => res.json({ version: VERSION }));
 
 // ---- /art: phone page that makes the card art (Pollinations, free) and lays out the print sheets ----

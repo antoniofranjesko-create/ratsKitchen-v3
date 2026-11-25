@@ -49,6 +49,7 @@ const SCENES = {
   wok: 'a black wok held up as a shield, clang',
   stink: 'a rat with a smoking stink bomb tucked under it, green stink clouds',
   eartag: 'a rat with a yellow plastic tag clipped to its ear',
+  deepclean: 'a yellow kitchen sponge with soap bubbles scrubbing a kitchen counter sparkling clean',
   day_stink: 'a cute grey heron inspector holding its nose next to green stink clouds',
   day_pest: 'a pest control van in a night market alley with yellow ear tags',
   day_piper: 'a wooden pipe playing music notes with rats following',
