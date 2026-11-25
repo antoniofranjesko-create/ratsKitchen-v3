@@ -1,7 +1,7 @@
 // ── LONG MODE (branch long-mode): this server runs long mode v1 by default ──
 // Any of these can still be overridden with an environment variable.
-const LONG_DEFAULTS = { V5: '1', V5TURN: 'side', IMM: '2', FOODINC: 'NONE', NOFOODCARDS: '1', HEALCOST: '3', THRESH: '10',
-  STARSBYP: '7,6,5,4', KIND3: '1', FOODCARD: '1', FOODSTART: '2', FOODOPT: '1', PLAYCAP: '2', SHEET: '1', NERFS: '1', FIGHT: '1', FIGHTCH: '1', FIGHTN: '2', CUT: 'exterm,gambit', BLOCKSWAP: '1', CATFAT: '1', TARGETTIMING: '1', NOBOILER: '1', BACKDOOR: '1', NOHANDLIMIT: '1', MD2: '1' };
+const LONG_DEFAULTS = { V5: '1', V5TURN: 'side', IMM: '2', FOODINC: 'NONE', NOFOODCARDS: '1', THRESH: '10',
+  KIND3: '1', FOODCARD: '1', FOODSTART: '2', FOODOPT: '1', PLAYCAP: '2', SHEET: '1', NERFS: '1', FIGHT: '1', FIGHTCH: '1', FIGHTN: '2', CUT: 'exterm,gambit', BLOCKSWAP: '1', CATFAT: '1', TARGETTIMING: '1', NOBOILER: '1', BACKDOOR: '1', NOHANDLIMIT: '1', MD2: '1', DEEPCLEAN: '2', TAGN: '2', HEALCOST: '999', STARSBYP: '6,6,6,6', DECKADJ: 'cat:5,boardup:5,backdoor:5,lastresort:5,grease:5,wok:5' };
 for (const [k, v] of Object.entries(LONG_DEFAULTS)) if (process.env[k] === undefined) process.env[k] = v;
 // RAT'S KITCHEN v3 — SERVER
 'use strict';

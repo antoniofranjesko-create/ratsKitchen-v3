@@ -289,13 +289,13 @@ function payFood(g, p, n) {
 //   V5TURN=ad   : play 1 attack and/or 1 defence | take a rat | draw a card
 //   V5TURN=plus : play 1 card AND then take a rat or draw a card
 const V5FREE = { ...(process.env.CLEANFREE ? { food_clean: 1 } : {}), fire: 1, feed: 1, breed: 1, end: 1, fire_wait: 1, fire_blocked: 1, v5rat: 1, v5card: 1, v5food: 1 };
-const V5DEF = { tonic_heal: 1, food_heal: 1, eat_lastresort: 1, boardup: 1, cat: 1, gambit: 1, copycat: 1, backdoor: 1 };
+const V5DEF = { deepclean: 1, tonic_heal: 1, food_heal: 1, eat_lastresort: 1, boardup: 1, cat: 1, gambit: 1, copycat: 1, backdoor: 1 };
 // ARMDEF: arming an inspection names no rival yet, so it counts as a card on yourself
 if (process.env.ARMDEF) { V5DEF.sched1 = 1; V5DEF.sched2 = 1; }
 // cat3 (22 Nov): three printed card types; a turn plays up to N cards (room setting), each of a different type
 const CAT3 = {
   att: ['mole', 'sched1', 'sched2', 'poach', 'fight', 'klepto', 'hotratato', 'play_ratato'],
-  def: ['boardup', 'eat_lastresort', 'food_heal', 'food_clean', 'tonic_heal', 'backdoor'],
+  def: ['boardup', 'eat_lastresort', 'food_heal', 'food_clean', 'tonic_heal', 'backdoor', 'deepclean'],
   nb:  ['cat', 'muzzle', 'disease', 'stink', 'eartag', 'chilli', 'territorial', 'inherit', 'delivery'],
 };
 function cat3Of(type) { for (const k in CAT3) if (CAT3[k].includes(type)) return k; return 'att'; }
@@ -412,6 +412,8 @@ function legalActions(g, p) {
       if (shieldable.length) push({ id: c.id, type: 'cat', needsRat: true, label: 'Cat — shield a rat' });
     }
     // ---- board up ----
+    if (t === 'deepclean' && (p.territorial > 0 || p.rats.some(r => r._muzzled || r._dis || r._stink || r._tag || r._chilliBy)))
+      push({ id: c.id, type: t, label: 'Deep Clean (clear every rival card off your kitchen)' });
     // ---- back door: swap one of your rats for the top of the rat deck (23 Nov) ----
     if (t === 'backdoor' && p.rats.length && !(p.territorial > 0) && (g.bins.length || g.alley.length))
       push({ id: c.id, type: t, needsRat: true, label: 'Back Door (swap a rat for the top of the rat deck)' });
@@ -626,6 +628,18 @@ function apply0(g, p, act, targetId, ratId) {
       if (global.__v5) global.__v5.heal = (global.__v5.heal || 0) + 1;
       p.stars = Math.min((p.maxStars || E.STARS), p.stars + 1); p._actedBuild = true;
       E.logAdd(g, `${p.name} spends 2 Food for a star.`); break;
+    }
+    case 'deepclean': {
+      bin(takeCard(act.id));
+      let n = 0;
+      for (const r of p.rats) {
+        if (r._muzzled) { r.prop = r._muzzled; r._muzzled = null; n++; }
+        if (r._dis) { r.heat -= 1; r._dis = 0; n++; }
+        if (r._stink) { r._stink = 0; n++; } if (r._tag) { r._tag = 0; n++; } if (r._chilliBy) { r._chilliBy = null; n++; }
+      }
+      if (p.territorial) { p.territorial = 0; p._terrBy = null; n++; }
+      if (global.__v5) global.__v5.deepcleanCards = (global.__v5.deepcleanCards || 0) + n;
+      E.logAdd(g, `${p.name} Deep Cleans the kitchen (${n} card${n === 1 ? '' : 's'} cleared).`); break;
     }
     case 'tonic_heal': {
       const i = p.hand.findIndex(c => c.tonic); if (i < 0) break;
@@ -1023,6 +1037,7 @@ function botTurnV5(g, p) {
     if (choice && choice.type === 'end') choice = null;
     if (!choice) {
       // urgent defence
+      if (!choice && has('deepclean')) { const nn = p.rats.reduce((s, r) => s + (r._muzzled ? 1 : 0) + (r._dis ? 1 : 0) + (r._stink ? 1 : 0) + (r._tag ? 2 : 0) + (r._chilliBy ? 2 : 0), 0) + (p.territorial ? 1 : 0); if (nn >= 2) choice = has('deepclean'); }
       if (!choice && has('food_clean')) { const nr = p.rats.find(r => r._tag || r._chilliBy) || p.rats.find(r => r._stink || r._dis) || p.rats.find(r => r._muzzled); if (nr && (nr._tag || nr._chilliBy || nr._stink || foodTotal(p) >= 4)) { choice = has('food_clean'); choice._own = nr.id; } }
       if (!choice && has('tonic_heal') && p.stars <= (p.maxStars || E.STARS) - 2) choice = has('tonic_heal');
       if (threat >= p.stars || p.stars <= 2) choice = choice || has('tonic_heal') || has('food_heal') || (p.stars <= 2 && has('eat_lastresort')) || (threat >= p.stars && has('boardup'));

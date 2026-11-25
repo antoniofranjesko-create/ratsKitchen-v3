@@ -1,4 +1,5 @@
 // Per player count: stars, last-standing, early end, first knockout timing, rounds.
+const __src=require('fs').readFileSync(__dirname+'/../../server.js','utf8');const __m=__src.match(/const LONG_DEFAULTS = (\{[\s\S]*?\});/);if(__m&&!process.env.NODEFAULTS){const LD=eval('('+__m[1]+')');for(const[k,v]of Object.entries(LD))if(process.env[k]===undefined)process.env[k]=v;}
 const E=require('../../game/engine'),A=require('../../game/actions');const N=+process.argv[2]||400;
 const med=a=>{const s=a.slice().sort((x,y)=>x-y);return s.length?s[Math.floor(s.length/2)]:NaN};
 const out=[];

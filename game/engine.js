@@ -54,6 +54,7 @@ const CARDS = {
   food:        { name: 'Food',            cls: 'buff', desc: 'Spend 2 Food to regain 1 star. Or spend 1 to feed a rat.' },
   stink:       { name: 'Stink Bomb',      cls: 'attack', desc: 'Tuck under a rival\'s rat. It stays with the rat wherever it goes. On Stink Inspection, its owner loses 1 star.' },
   eartag:      { name: 'Ear Tag',         cls: 'attack', desc: 'Clip onto a rival\'s rat. It stays with the rat wherever it goes. On Pest Control, the rat goes back into the rat deck.' },
+  deepclean:   { name: 'Deep Clean',      cls: 'buff', desc: 'Discard every card rivals have put on your rats and kitchen (Muzzle, Disease, Stink Bomb, Ear Tag, Hot Chilli, Territorial).' },
   backdoor:    { name: 'Back Door',       cls: 'buff', desc: 'Shuffle one of your rats (and anything tucked under it) back into the rat deck, then take the top rat.' },
   cat:         { name: 'Cat',             cls: 'buff', desc: 'Play on one of your rats (not Fat) to shield it — blocks the next single attack on that rat.' },
   lastresort:  { name: 'Last Resort',     cls: 'buff', desc: 'Eat any one of your rats and regain stars equal to its weight.' },
@@ -148,6 +149,7 @@ function deckConfig(P) {
     actions.stink = process.env.MD2 ? +(process.env.STINKN ?? 3) : 0;
     actions.eartag = process.env.MD2 ? +(process.env.TAGN ?? 3) : 0;
     actions.backdoor = process.env.BACKDOOR ? +(process.env.BACKDOORN ?? 4) : 0;   // 23 Nov: Back Door x4 (on you)
+    actions.deepclean = process.env.DEEPCLEAN ? +process.env.DEEPCLEAN : 0;   // 25 Nov: Deep Clean (Defend) clears your whole kitchen
     // DECKADJ (test lever): 'cat:5,grease:5' sets copy counts
     for (const kv of (process.env.DECKADJ || '').split(',').filter(Boolean)) { const [k, n] = kv.split(':'); actions[k] = +n; }
     actions.disease = process.env.NERFS ? +(process.env.DISN ?? 4) : 0;   // Inheritance back x3 (take 2 cards) — locked 21 Nov
