@@ -893,7 +893,7 @@ function endTurn(g) {
   const p = g.players[g.active];
   // TARGETTIMING: Territorial on you ends at the end of your own turn (you discard it)
   if (process.env.TARGETTIMING && p.territorial) { p.territorial = 0; p._terrBy = null; }
-  while (p.hand.length > HAND) {
+  while (!process.env.NOHANDLIMIT && p.hand.length > HAND) {   // NOHANDLIMIT (25 Nov, Koko): no hand limit in long mode
     // Food-as-cards: discard the oldest non-Food card first; discarded Food returns to the Food pile
     let i = 0;
     if (process.env.FOODCARD) { const j = p.hand.findIndex(c => c.card !== 'food'); if (j >= 0) i = j; }

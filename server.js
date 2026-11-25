@@ -1,7 +1,7 @@
 // ── LONG MODE (branch long-mode): this server runs long mode v1 by default ──
 // Any of these can still be overridden with an environment variable.
 const LONG_DEFAULTS = { V5: '1', V5TURN: 'side', IMM: '2', FOODINC: 'NONE', NOFOODCARDS: '1', HEALCOST: '3', THRESH: '10',
-  STARSBYP: '7,6,5,4', KIND3: '1', FOODCARD: '1', FOODSTART: '2', FOODOPT: '1', PLAYCAP: '2', SHEET: '1', NERFS: '1', FIGHT: '1', FIGHTCH: '1', FIGHTN: '2', CUT: 'exterm,gambit', BLOCKSWAP: '1', CATFAT: '1', TARGETTIMING: '1', NOBOILER: '1', BACKDOOR: '1' };
+  STARSBYP: '7,6,5,4', KIND3: '1', FOODCARD: '1', FOODSTART: '2', FOODOPT: '1', PLAYCAP: '2', SHEET: '1', NERFS: '1', FIGHT: '1', FIGHTCH: '1', FIGHTN: '2', CUT: 'exterm,gambit', BLOCKSWAP: '1', CATFAT: '1', TARGETTIMING: '1', NOBOILER: '1', BACKDOOR: '1', NOHANDLIMIT: '1' };
 for (const [k, v] of Object.entries(LONG_DEFAULTS)) if (process.env[k] === undefined) process.env[k] = v;
 // RAT'S KITCHEN v3 — SERVER
 'use strict';
@@ -394,7 +394,7 @@ io.on('connection', (socket) => {
   });
 });
 
-const VERSION = 'L1.5';
+const VERSION = 'L1.6';
 app.get('/version', (req, res) => res.json({ version: VERSION }));
 
 // ---- /art: phone page that makes the card art (Pollinations, free) and lays out the print sheets ----

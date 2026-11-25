@@ -9,7 +9,7 @@ fs.mkdirSync(OUT, { recursive: true }); fs.mkdirSync(ART, { recursive: true });
 
 const NEST = { grill: ['➰', 'Rex', '#c4552f'], cold: ['🥚', 'Hairless', '#c75c8a'], pantry: ['👂', 'Dumbo', '#3a74b0'] };
 const SIDE = {
-  rival: ['At a rival', '#b8322a'], you: ['On you', '#2e8a55'], either: ['Rival or you', '#7a4ea3'],
+  rival: ['Attack', '#b8322a'], you: ['Defend', '#2e8a55'], either: ['Attack or Defend', '#7a4ea3'],
   react: ['Reaction · free', '#2b62a0'], snap: ['Fires when drawn', '#7d4a1e'], day: ['Market Day', '#5b5b5b'],
   ref: ['Reference', '#333'], food: ['Pile', '#4f8a2e'], token: ['Token', '#555'],
 };
@@ -40,7 +40,7 @@ add(4, { key: 'boardup', side: 'you', title: 'Board Up', icon: '🔨', text: 'Yo
 add(4, { key: 'lastresort', side: 'you', title: 'Last Resort', icon: '🍽️', text: 'Put one of your rats back into the rat deck; <b>regain stars</b> equal to its weight.' });
 add(4, { key: 'backdoor', side: 'you', title: 'Back Door', icon: '🚪', text: 'Shuffle one of your rats (and anything tucked under it) back into the rat deck, then <b>take the top rat</b>. Not while a Territorial is on you.' });
 add(3, { key: 'cat', side: 'you', title: 'Cat', icon: '🐱', text: 'Place on one of your rats: it\'s <b>shielded</b> from the next card aimed at it.' });
-add(6, { key: 'delivery', side: 'either', title: 'Special Delivery', icon: '🚚', text: 'Put the top rat of the rat deck into <b>any</b> kitchen. Counts as At a rival or On you, by where it goes.' });
+add(6, { key: 'delivery', side: 'either', title: 'Special Delivery', icon: '🚚', text: 'Put the top rat of the rat deck into <b>any</b> kitchen. Counts as Attack or Defend, by where it goes.' });
 add(3, { key: 'grease', side: 'react', title: 'Grease the Palm', icon: '💰', text: 'On another player\'s turn: <b>cancel one inspection</b> aimed at you.' });
 add(3, { key: 'wok', side: 'react', title: 'Wok Block', icon: '🍳', text: 'On another player\'s turn: <b>cancel any other attack</b> aimed at you.' });
 
@@ -77,8 +77,7 @@ const NESTS = ['grill', 'cold', 'pantry']; let rot = 0;
 const MINI = [];
 for (const [key, title, w, h, teeth, text] of RATS) for (const t of teeth)
   MINI.push({ key, rat: true, title, w, h, teeth: t, text, nest: key === 'sewer' ? null : NESTS[rot++ % 3] });
-for (let i = 0; i < 21; i++) MINI.push({ key: 'food', side: 'food', title: 'Food', icon: '🍜', food: true });
-for (let i = 0; i < 6; i++) MINI.push({ key: 'kind3', side: 'token', title: 'Three of a kind', icon: '🐀🐀🐀', token: true });
+for (let i = 0; i < 27; i++) MINI.push({ key: 'food', side: 'food', title: 'Food', icon: '🍜', food: true });
 
 // ---------- rendering ----------
 const artFor = key => { for (const ext of ['png', 'jpg', 'jpeg', 'webp']) { const f = path.join(ART, `${key}.${ext}`); if (fs.existsSync(f)) return 'file://' + f; } return null; };
@@ -95,26 +94,27 @@ const artBox = (c, h) => {
 function poker(c) {
   const [label, col] = SIDE[c.side];
   if (c.ref) return `<div class="card poker" style="--c:${col}"><div class="band">${label}</div><div class="title">Your turn</div>
-    <ol class="ref"><li><b>Rat King check:</b> 10+ rat weight now = you win.</li><li>A Hot Chilli on your rat goes off.</li>
-    <li><b>Draw 1</b> market card (a Snap fires on you).</li>
-    <li><b>One choice:</b><br>• play up to 2 cards: <span style="color:${SIDE.rival[1]}">1 at a rival</span> + <span style="color:${SIDE.you[1]}">1 on you</span><br>• or take the top rat<br>• or draw another card<br>• or take 1 Food</li>
-    <li><b>Discard to 7</b> (Food counts). A Territorial on you ends.</li></ol>
-    <div class="small"><b>Free any time on your turn:</b> fire your armed inspection; feed rats (each once). <b>Heal:</b> 3 Food = 1 star (your On-you card).<br><b>Stars:</b> ${STARS}.</div></div>`;
+    <ol class="ref"><li><b>Rat King check:</b> 10+ rat weight = you win.</li><li>Cards on your rats or kitchen <b>resolve</b> (Hot Chilli goes off).</li>
+    <li><b>Draw 1</b> market card.</li>
+    <li><b>One choice:</b> play up to 2 cards (<span style="color:${SIDE.rival[1]}">1 Attack</span> + <span style="color:${SIDE.you[1]}">1 Defend</span>) · or take the top rat · or draw another card · or take 1 Food.</li>
+    <li><b>End:</b> a Territorial on you ends.</li></ol>
+    <div class="small"><b>Free on your turn:</b> fire your armed inspection; feed rats (each once). <b>Heal:</b> 3 Food = 1 star (your Defend card).<br>
+    <b>Three of a kind:</b> first time you hold 3 rats of one breed, take 1 Food, then turn this card over (once per game).<br><b>Stars:</b> ${STARS}.</div></div>`;
   const nests = c.nests ? `<div class="nests">${c.nests.map(nestBadge).join(c.nests.length > 1 ? '<span class="or">or</span>' : '')}</div>` : '';
   const stats = c.stats ? `<div class="stats">${stat('Weight', c.stats[0])}${stat('Heat', c.stats[1])}</div>` : '';
   return `<div class="card poker" style="--c:${col}"><div class="band">${label}</div><div class="title">${c.title}</div>${c.sub ? `<div class="sub">${c.sub}</div>` : ''}
-    ${artBox(c, c.nests || c.stats ? 34 : 40)}${nests}${stats}<div class="text">${c.text}</div><div class="foot">Rat's Kitchen · long mode</div></div>`;
+    ${artBox(c, c.nests || c.stats ? 28 : 33)}${nests}${stats}<div class="text">${c.text}</div><div class="foot">Rat's Kitchen · long mode</div></div>`;
 }
 const stat = (l, v) => `<div class="stat"><div class="sv">${v}</div><div class="sl">${l}</div></div>`;
 function mini(c) {
   if (c.rat) {
     const col = c.nest ? NEST[c.nest][2] : '#6b6b6b';
     return `<div class="card mini" style="--c:${col}"><div class="mband"><span>${c.title}</span><span>${c.nest ? NEST[c.nest][0] : '🚫'}</span></div>
-      ${artBox({ key: c.key, icon: '🐀', breed: c.nest }, 20)}<div class="mnest">${c.nest ? NEST[c.nest][1] : 'No breed'}</div>
+      ${artBox({ key: c.key, icon: '🐀', breed: c.nest }, 17)}<div class="mnest">${c.nest ? NEST[c.nest][1] : 'No breed'}</div>
       <div class="stats m">${stat('Weight', c.w)}${stat('Heat', c.h)}${stat('Teeth', c.teeth)}</div><div class="mtext">${c.text}</div></div>`;
   }
   const [label, col] = SIDE[c.side];
-  const body = c.food ? 'Spend for <b>feeding</b> rats, or <b>3 Food = 1 star</b>. Counts towards your 7-card hand. Spent Food goes back to the Food pile.'
+  const body = c.food ? 'Spend for <b>feeding</b> rats, or <b>3 Food = 1 star</b>. Spent Food goes back to the Food pile.'
     : 'The first time you hold <b>3 rats of one breed</b>, hand this in and take 1 Food. Once per game.';
   return `<div class="card mini" style="--c:${col}"><div class="mband"><span>${c.title}</span><span>${label}</span></div>${artBox(c, 24)}<div class="mtext big">${body}</div></div>`;
 }
@@ -142,21 +142,82 @@ i.v{position:absolute;width:0;height:5mm;border-left:.2mm solid #000}i.h{positio
 .vec{overflow:hidden;line-height:0}.vec svg{display:block}.ph{display:flex;flex-direction:column;align-items:center;justify-content:center;background:repeating-linear-gradient(45deg,#fafafa 0 2mm,#f1f1f1 2mm 4mm)}
 .emo{font-family:'Noto Color Emoji';font-size:28pt;line-height:1}.mini .emo{font-size:15pt}.artkey{font-size:5pt;color:#aaa;margin-top:.8mm}
 .nests{display:flex;align-items:center;gap:1mm;margin-bottom:1.2mm}.nest{color:#fff;border-radius:1mm;padding:.5mm 1.5mm;font:600 7pt Poppins,sans-serif}.or{font-size:6.5pt;color:#666}
-.text{font-size:8pt;line-height:1.3;flex:1}.foot{font-size:5pt;color:#aaa;text-align:right}
+.text{font-size:9.2pt;line-height:1.28;flex:1}.foot{font-size:5pt;color:#aaa;text-align:right}
 .stats{display:flex;gap:1.2mm;margin-bottom:1.2mm}.stat{flex:1;border:.3mm solid var(--c);border-radius:1mm;text-align:center;padding:.4mm 0}
 .sv{font:600 11pt/1 Poppins,sans-serif}.sl{font-size:5pt;text-transform:uppercase;letter-spacing:.06em;color:#555}
 .mini{padding:0 2.2mm 1.6mm;border-top:0}.mband{margin:0 -2.2mm;background:var(--c);color:#fff;font:600 7pt Poppins,sans-serif;padding:1mm 2.2mm;display:flex;justify-content:space-between;align-items:center}
 .mband span:last-child{font-family:'Noto Color Emoji',Poppins;font-size:7pt}.mini .art{margin:1.2mm 0 .8mm}.mnest{font:600 6pt Poppins,sans-serif;color:var(--c);margin-bottom:.8mm}
-.stats.m .sv{font-size:9.5pt}.mtext{font-size:6.2pt;line-height:1.22}.mtext.big{font-size:6.6pt}
-.ref{font-size:7.2pt;line-height:1.3;padding-left:4mm;margin:1.5mm 0}.ref li{margin-bottom:.6mm}.small{font-size:6.4pt;line-height:1.28;color:#333}`;
-const pages = [...sheets(POKER, 'poker'), ...sheets(MINI, 'mini')];
+.stats.m .sv{font-size:9.5pt}.mtext{font-size:7.2pt;line-height:1.2}.mtext.big{font-size:7.6pt}
+.rules{padding:12mm 13mm}.rcols{columns:2;column-gap:7mm;font-size:8.4pt;line-height:1.32}.rcols h1{column-span:all;font:600 16pt Poppins,sans-serif;margin:0 0 2mm}.rcols h2{font:600 10.5pt Poppins,sans-serif;margin:3mm 0 1mm;color:#b8322a;break-after:avoid}.rcols p,.rcols li{margin:0 0 1.2mm}.rcols ol,.rcols ul{margin:0 0 1.5mm;padding-left:4.5mm}.rcols ul ul{margin-top:.8mm}.tag{text-align:center;margin-top:3mm!important}
+.ref{font-size:7.9pt;line-height:1.26;padding-left:4mm;margin:1.2mm 0}.ref li{margin-bottom:.5mm}.small{font-size:7pt;line-height:1.25;color:#333}`;
+
+// ---------- full instructions (last pages) ----------
+const RULES = `<section class="page rules"><div class="rcols">
+<h1>Rat's Kitchen · Long mode rules</h1>
+<p>A 30-minute game for 3–6 players. You run a stall in the night market, build up your rats, and bring the Health Inspector down on everyone else.</p>
+<h2>Winning</h2>
+<p><b>Rat King:</b> start your own turn with <b>10 or more rat weight</b> in your kitchen. Reaching 10 isn't enough on its own: you must still hold it when your next turn begins, so everyone gets one round to knock you down.<br>
+<b>Last stall standing:</b> every other stall has been shut down.</p>
+<h2>Components</h2>
+<p>Market deck: 81 cards + 4 Hot Ratato · Rat deck: 37 rats · Market Day: 6 cards + 1 spare Mole · Food pile: 27 Food cards · 6 reference cards. <b>Also needed:</b> star tokens (coins or beads; up to 7 per player) and a first-player marker.</p>
+<h2>Setup</h2>
+<ol><li>Shuffle the <b>market deck</b> and the <b>rat deck</b> separately, side by side.</li>
+<li>Each player takes stars: <b>${STARS}</b>.</li>
+<li>Each player takes a reference card and <b>2 Food</b>.</li>
+<li>Deal each player <b>6 market cards</b>. Any Snap Inspection or Hot Ratato dealt is set aside and shuffled back in afterwards.</li>
+<li>Put the <b>Market Day</b> cards in a face-up pile, the spare Mole beside it, and the Food pile in the middle.</li>
+<li>Give the starting player the first-player marker. Play passes left.</li></ol>
+<h2>The table</h2>
+<ul><li><b>Your kitchen</b> (your rats and anything on them) is public. <b>Your hand</b> is secret. There is <b>no hand limit</b>.</li>
+<li><b>Breeds:</b> every rat is a <b>Rex</b> ➰, <b>Hairless</b> 🥚 or <b>Dumbo</b> 👂. Sewer Rats have no breed. Inspections check one breed.</li>
+<li><b>Rat deck:</b> face-down. Any rat leaving play is shuffled back into it, and anything on it is discarded.</li>
+<li><b>Closed stalls:</b> a shut-down stall's hand stays on the table as a face-down pile.</li>
+<li><b>Food</b> is a card in your hand. Spent Food goes back to the Food pile.</li>
+<li><b>Touch rule:</b> you can affect each rival's kitchen only once per turn.</li></ul>
+<h2>Your turn</h2>
+<ol><li><b>Rat King check:</b> 10+ rat weight now, you win.</li>
+<li><b>Resolve</b> cards on your rats or kitchen: a Hot Chilli on your rat goes off (the rat goes back into the rat deck).</li>
+<li><b>Draw 1</b> market card. A Snap Inspection fires on you straight away.</li>
+<li><b>Make one choice:</b>
+ <ul><li><b>Play cards:</b> up to 2, <b>1 Attack</b> (aimed at a rival: their kitchen, rats or hand) and <b>1 Defend</b> (on your own kitchen). Arming a Scheduled Inspection is your Attack. Special Delivery counts as whichever kitchen the rat goes to. The table can agree 1 card instead.</li>
+ <li><b>Take a rat:</b> the top rat of the rat deck goes into your kitchen.</li>
+ <li><b>Draw</b> another market card.</li>
+ <li><b>Take 1 Food</b> from the Food pile.</li></ul></li>
+<li><b>End:</b> a Territorial on your kitchen ends; discard it.</li></ol>
+<p><b>Free at any point in your turn:</b> fire an inspection you armed last turn; feed rats (each rat once per turn). <b>Healing</b> (3 Food for 1 star) counts as your Defend card.</p>
+<p><b>Reactions</b> are played free on someone else's turn: <b>Grease the Palm</b> cancels an inspection aimed at you; <b>Wok Block</b> cancels any other attack aimed at you.</p>
+<p><b>Three of a kind:</b> the first time you hold 3 rats of the same breed, take 1 Food, then turn your reference card over. Once per game.</p>
+<p><b>A round</b> is one pass round the table. At the start of each round, flip the next <b>Market Day</b>; it lasts that round.</p>
+<h2>Rats</h2>
+<p>Every rat has a <b>breed</b>, a <b>weight</b> (counts towards Rat King), a <b>heat</b> (damage when its breed is inspected) and <b>Teeth</b> (for Scrap Fights; every rat has a different number, so fights never tie). Some have an ability.<br>
+<b>Feeding:</b> pay the Food shown to use a Feed ability. Each rat can be fed once per turn: turn it sideways, and straighten it at the start of your next turn.</p>
+<h2>Inspections</h2>
+<p>An inspection names a breed. The target loses stars equal to the <b>total heat of their rats of that breed</b>; no rats of that breed, nothing happens. Rats are never removed by an inspection.</p>
+<ul><li><b>Scheduled Inspection:</b> arm it in front of you (your Attack). On your <b>next</b> turn fire it at a rival for free; if you don't, it expires at the end of that turn. Two-breed cards: pick one breed when you fire. Only one armed at a time.</li>
+<li><b>Health Inspection:</b> a rival loses 1 star, whatever their rats.</li>
+<li><b>Snap Inspections</b> fire on <b>you</b> the moment you draw them.</li>
+<li>You can't fire at a boarded-up kitchen, or one you've already touched this turn.</li></ul>
+<h2>Card types</h2>
+<p>The band at the top of each card says how it's played: <b style="color:${SIDE.rival[1]}">Attack</b> (aimed at a rival), <b style="color:${SIDE.you[1]}">Defend</b> (on your own kitchen), <b style="color:${SIDE.either[1]}">Attack or Defend</b> (by where it goes), <b style="color:${SIDE.react[1]}">Reaction</b> (free, on others' turns), <b style="color:${SIDE.snap[1]}">Fires when drawn</b>. Each card's own text gives its effect.</p>
+<h2>Scrap Fight</h2>
+<ol><li>Challenge a rival who has a rat; you need one too.</li>
+<li>Both secretly choose one of your own rats and reveal together.</li>
+<li><b>Longer Teeth wins.</b> The winning rat grabs the scrap and bolts: it goes back into the rat deck.</li>
+<li>If <b>you</b> (the challenger) win, your rival loses 1 star. If they win, nobody loses a star.</li></ol>
+<p>Sending a heavy rat to win costs you Rat King weight, so bluffing pays both ways.</p>
+<h2>Shutting down</h2>
+<p>Lose your last star and your stall is shut down. Your rats go back into the rat deck. If someone placed Inheritance on you, they take 2 of your cards; the rest of your hand stays on the table face-down as a closed stall (Scavenger Rats can take from it).</p>
+<p class="tag"><i>Rats can't be killed. They only ever move somewhere else.</i></p>
+</div></section>`;
+
+const pages = [...sheets(POKER, 'poker'), ...sheets(MINI, 'mini'), RULES];
 const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Rat's Kitchen long mode — print-and-play</title><style>${css}</style></head><body>${pages.join('')}</body></html>`;
 fs.writeFileSync(path.join(OUT, 'cards.html'), html);
 console.log(`poker ${POKER.length} cards (${Math.ceil(POKER.length / 9)} sheets), mini ${MINI.length} cards (${Math.ceil(MINI.length / 16)} sheets), market ${M.length}`);
 
 // ---------- web version for phones: public/art.html (served at /art) ----------
 WEB = true;
-const webPages = [...sheets(POKER, 'poker'), ...sheets(MINI, 'mini')];
+const webPages = [...sheets(POKER, 'poker'), ...sheets(MINI, 'mini'), RULES];
 const files = require('./prompts').jobs.map(j => j.file);
 const webCss = `@media screen{body{background:#ddd}#sheets{transform-origin:0 0}.page{background:#fff;margin:0 auto 8mm;box-shadow:0 1mm 4mm #0003}}
 #bar{position:sticky;top:0;z-index:9;background:#1d1b19;color:#fff;font:14px/1.35 system-ui,sans-serif;padding:10px 12px}

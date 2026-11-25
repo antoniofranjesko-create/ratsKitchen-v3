@@ -485,7 +485,7 @@ button:disabled{opacity:.35;cursor:not-allowed}
 <body>
 <div class="topbar">
   <div class="brand">RAT'S <b>KITCHEN</b></div>
-  <div class="meta"><button id="btnLeave" class="ghost leavebtn hidden">Leave table</button><span class="build">BUILD L1.5 · LONG MODE</span></div>
+  <div class="meta"><button id="btnLeave" class="ghost leavebtn hidden">Leave table</button><span class="build">BUILD L1.6 · LONG MODE</span></div>
 </div>
 
 <div id="lobby" class="wrap">
@@ -910,8 +910,8 @@ function renderTurnGuide(meActive){
   if(meActive){
     const cap=STATE.playCap||2, full=(u.total||0)>=cap;
     if(SIDE()){
-      h+=chip('✓ Drew 1','done')+`<span class="or">then ONE of: play${cap>1?' 1 card at a rival + 1 on you':' 1 card'} —</span>`;
-      for(const [k,lab] of [['att','At a rival'],['def','On you']]) h+=chip((u[k]?'✓ ':'')+lab,u[k]?'done':((drew||full)?'off':'open'));
+      h+=chip('✓ Drew 1','done')+`<span class="or">then ONE of: play${cap>1?' 1 Attack + 1 Defend card':' 1 card'} —</span>`;
+      for(const [k,lab] of [['att','Attack'],['def','Defend']]) h+=chip((u[k]?'✓ ':'')+lab,u[k]?'done':((drew||full)?'off':'open'));
     } else {
     h+=chip('✓ Drew 1','done')+`<span class="or">then ONE of: play up to ${cap}, one of each type —</span>`;
     for(const [k,lab] of [['att','Attack'],['def','Defence'],['nb','Nerf/Buff']]) h+=chip((u[k]?'✓ ':'')+lab,u[k]?'done':((drew||full)?'off':'open'));
@@ -928,11 +928,11 @@ function showRulesSummary(){
   wrap.innerHTML=`<div class="box" style="max-width:460px">
     <div class="top" style="background:var(--lamp);color:var(--grease)">Long mode — your turn</div>
     <h3>Every turn you MUST</h3><p>1. Draw 1 card (a Snap Inspection fires on you).<br>2. Then make <b>ONE choice</b>:</p>
-    <p>• <b>Play cards</b> — ${SIDE()?((STATE.playCap||2)>1?'<b>1 card aimed at a rival</b> (their kitchen, rats or hand) <b>and/or 1 card on your own kitchen</b>':'<b>1 card</b>'):`up to <b>${STATE.playCap||2}</b>, each of a different type (<b>Attack</b>, <b>Defence</b>, <b>Nerf / Buff</b>)`}<br>• or <b>Take a rat</b> from the rat deck<br>• or <b>Draw another card</b><br>• or <b>Take 1 Food</b> from the Food pile (Food counts towards your 7-card hand)</p>
-    <h3>You MAY, for free</h3><p>• Fire an inspection you armed last turn<br>• Feed rats (each once a turn)<br>Healing (3 Food → 1 star) counts as ${SIDE()?'your card on yourself':'your defence'}.</p>
+    <p>• <b>Play cards</b> — ${SIDE()?((STATE.playCap||2)>1?'<b>1 Attack card</b> (aimed at a rival: their kitchen, rats or hand) <b>and/or 1 Defend card</b> (on your own kitchen)':'<b>1 card</b>'):`up to <b>${STATE.playCap||2}</b>, each of a different type (<b>Attack</b>, <b>Defence</b>, <b>Nerf / Buff</b>)`}<br>• or <b>Take a rat</b> from the rat deck<br>• or <b>Draw another card</b><br>• or <b>Take 1 Food</b> from the Food pile</p>
+    <h3>You MAY, for free</h3><p>• Fire an inspection you armed last turn<br>• Feed rats (each once a turn)<br>Healing (3 Food → 1 star) counts as ${SIDE()?'your Defend card':'your defence'}.</p>
     <h3>Reactions</h3><p>Grease the Palm cancels an inspection on you; Wok Block cancels any other attack. Both play automatically.</p>
     <h3>Win</h3><p>Start your turn with <b>${STATE.threshold} rat weight</b> (Rat King), or be the last stall standing.</p>
-    <p style="color:var(--ash)">${SIDE()?'At a rival: inspections (arming counts), Poach, Scrap Fight, Kleptomaniac, Ratata Quente, Hot Ratato, Muzzle, Disease, Hot Chilli, Territorial, Inheritance. On you: Board Up, Last Resort, Cat, Back Door, healing. Special Delivery counts as whichever kitchen the rat goes to.':'Attack: inspections, Poach, Scrap Fight, Kleptomaniac, Ratata Quente, Hot Ratato. Defence: Board Up, Last Resort, healing. Nerf / Buff: Cat, Muzzle, Disease, Hot Chilli, Territorial, Inheritance, Special Delivery.'} Each card shows this at the top.</p>
+    <p style="color:var(--ash)">${SIDE()?'Attack: inspections (arming counts), Poach, Scrap Fight, Kleptomaniac, Ratata Quente, Hot Ratato, Muzzle, Disease, Hot Chilli, Territorial, Inheritance. Defend: Board Up, Last Resort, Cat, Back Door, healing. Special Delivery counts as whichever kitchen the rat goes to.':'Attack: inspections, Poach, Scrap Fight, Kleptomaniac, Ratata Quente, Hot Ratato. Defence: Board Up, Last Resort, healing. Nerf / Buff: Cat, Muzzle, Disease, Hot Chilli, Territorial, Inheritance, Special Delivery.'} Each card shows this at the top.</p>
     <div class="foot"><button data-close="1">Close</button></div></div>`;
   wrap.onclick=e=>{ if(e.target===wrap||e.target.dataset.close) wrap.remove(); };
   document.body.appendChild(wrap);
@@ -967,7 +967,7 @@ const BUILD_CARDS=['food','delivery','recycle','rattrap','exterm','inherit','gam
 // long mode: three printed card types — a turn plays up to N cards (table setting), each a different type
 const SIDE=()=>STATE&&STATE.v5turn==='side';
 const LM_SIDE={att:['mole','sched1','sched2','poach','fight','klepto','hotratato','hotrat','muzzle','disease','chilli','territorial','inherit'],def:['boardup','lastresort','cat','backdoor'],either:['delivery'],react:['grease','wok'],food:['food']};
-const LM_SIDE_LABEL={att:'At a rival',def:'On you',either:'Rival or you',react:'Reaction',food:'Food'};
+const LM_SIDE_LABEL={att:'Attack',def:'Defend',either:'Attack or Defend',react:'Reaction',food:'Food'};
 const LM_SETS3={att:['mole','sched1','sched2','poach','fight','klepto','hotratato','hotrat'],def:['boardup','lastresort','backdoor'],nb:['cat','muzzle','disease','chilli','territorial','inherit','delivery'],react:['grease','wok'],food:['food']};
 const LM_LABEL3={att:'Attack',def:'Defence',nb:'Nerf / Buff',react:'Reaction',food:'Food'};
 const LM_SETS_=()=>SIDE()?LM_SIDE:LM_SETS3;
@@ -983,9 +983,9 @@ function whyUnplayable(card){
     if(k==='food') return 'Food is spent with the buttons below: Heal (3 Food → 1 star) or Feed a rat';
     if(u.drew) return 'you took a rat, Food or a card this turn — no cards can be played';
     const ty=LM_TYPE(k);
-    if(SIDE()&&ty==='either'&&u.att&&u.def) return `you've played a card at a rival and one on yourself this turn`;
-    if(SIDE()&&ty==='att'&&u.att) return `you've already played a card aimed at a rival this turn`;
-    if(SIDE()&&ty==='def'&&u.def) return `you've already played a card on your own kitchen this turn`;
+    if(SIDE()&&ty==='either'&&u.att&&u.def) return `you've played an Attack and a Defend card this turn`;
+    if(SIDE()&&ty==='att'&&u.att) return `you've already played an Attack card this turn`;
+    if(SIDE()&&ty==='def'&&u.def) return `you've already played a Defend card this turn`;
     if(!SIDE()&&ty && u[ty]) return `you've already played ${ty==='att'?'an':'a'} ${LM_LABEL[ty]} card this turn`;
     if((u.total||0)>=(STATE.playCap||2)) return `you've played ${STATE.playCap||2} card${(STATE.playCap||2)>1?'s':''} this turn`;
   }
