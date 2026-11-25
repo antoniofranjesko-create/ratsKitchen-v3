@@ -6,7 +6,7 @@ const fs = require('fs'), path = require('path');
 const ART = path.join(__dirname, 'art'), OUT = path.join(__dirname, 'out');
 fs.mkdirSync(OUT, { recursive: true }); fs.mkdirSync(ART, { recursive: true });
 
-const NEST = { grill: ['🔥', 'Grill', '#d4572a'], cold: ['❄️', 'Cold store', '#2f7fb8'], pantry: ['🌾', 'Pantry', '#b08a3e'] };
+const NEST = { grill: ['➰', 'Rex', '#c4552f'], cold: ['🥚', 'Hairless', '#c75c8a'], pantry: ['👂', 'Dumbo', '#3a74b0'] };
 const SIDE = {
   rival: ['At a rival', '#b8322a'], you: ['On you', '#2e8a55'], either: ['Rival or you', '#7a4ea3'],
   react: ['Reaction · free', '#2b62a0'], snap: ['Fires when drawn', '#7d4a1e'], day: ['Market Day', '#5b5b5b'],
@@ -18,18 +18,18 @@ const STARS = '3 players 7 · 4 players 6 · 5 players 5 · 6 players 4';
 const M = [];
 const add = (n, c) => { for (let i = 0; i < n; i++) M.push({ ...c }); };
 for (const n of ['grill', 'cold', 'pantry']) add(2, { key: 'sched1', side: 'rival', title: 'Scheduled Inspection', nests: [n], icon: '🦅',
-  text: '<b>Arm it</b> in front of you. On your <b>next</b> turn, fire it at a rival for free: they lose stars equal to the total heat of their rats in this nest. Not fired that turn → it expires. One armed at a time.' });
+  text: '<b>Arm it</b> in front of you. On your <b>next</b> turn, fire it at a rival for free: they lose stars equal to the total heat of their rats of this breed. Not fired that turn → it expires. One armed at a time.' });
 for (const pair of [['grill', 'cold'], ['cold', 'pantry'], ['pantry', 'grill']]) add(2, { key: 'sched2', side: 'rival', title: 'Scheduled Inspection', nests: pair, icon: '🦅',
-  text: '<b>Arm it</b> in front of you. On your <b>next</b> turn, fire it at a rival for free and <b>pick one</b> of its two nests: they lose stars equal to their heat there. Expires if not fired.' });
+  text: '<b>Arm it</b> in front of you. On your <b>next</b> turn, fire it at a rival for free and <b>pick one</b> of its two breeds: they lose stars equal to the heat of their rats of that breed. Expires if not fired.' });
 add(3, { key: 'mole', side: 'rival', title: 'Health Inspection', sub: 'Naked Mole Rat', icon: '🦫', text: 'A rival loses <b>1 star</b>, whatever their rats.' });
 for (const n of ['grill', 'cold', 'pantry']) add(2, { key: 'snap', side: 'snap', title: 'Snap Inspection', nests: [n], icon: '🦅',
-  text: 'Fires on <b>you</b> the moment you draw it: lose stars equal to the heat of your rats in this nest. Then discard it.' });
+  text: 'Fires on <b>you</b> the moment you draw it: lose stars equal to the heat of your rats of this breed. Then discard it.' });
 add(2, { key: 'snapmole', side: 'snap', title: 'Snap Inspection', sub: 'Mole', icon: '🦫', text: 'Fires on <b>you</b> the moment you draw it: lose <b>1 star</b>. Then discard it.' });
 add(5, { key: 'poach', side: 'rival', title: 'Poach', icon: '🎣', text: 'Steal a <b>weight-1</b> rat from a rival\'s kitchen. You choose which.' });
 add(2, { key: 'fight', side: 'rival', title: 'Scrap Fight', icon: '🥊', text: 'Challenge a rival (you both need a rat). Each secretly picks one of their own rats; reveal together. <b>Longer Teeth wins</b>; the winning rat goes back into the rat deck. If <b>you</b> win, they lose 1 star.' });
 add(3, { key: 'klepto', side: 'rival', title: 'Kleptomaniac', icon: '🧤', text: 'Take a random card from a rival\'s hand.' });
 add(4, { key: 'quente', side: 'rival', title: 'Ratata Quente', icon: '🌡️', text: 'Dump one of <b>your</b> rats into a rival\'s kitchen.' });
-add(4, { key: 'hotratato', side: 'rival', title: 'Hot Ratato', icon: '🥔', stats: [0, 1, null], text: 'Throw this junk rat into a rival\'s kitchen, where it stays as a rat (weight 0, heat 1, no nest).' });
+add(4, { key: 'hotratato', side: 'rival', title: 'Hot Ratato', icon: '🥔', stats: [0, 1, null], text: 'Throw this junk rat into a rival\'s kitchen, where it stays as a rat (weight 0, heat 1, no breed).' });
 add(3, { key: 'muzzle', side: 'rival', title: 'Muzzle', icon: '🤐', text: 'Tuck under a rival\'s rat: it <b>loses its ability</b> while the Muzzle stays.' });
 add(4, { key: 'disease', side: 'rival', title: 'Disease', icon: '🦠', text: 'Tuck under a rival\'s rat: <b>+1 heat</b>.' });
 add(4, { key: 'chilli', side: 'rival', title: 'Hot Chilli', icon: '🌶️', text: 'Place on a rival\'s rat. At the start of <b>their</b> next turn it goes off: the rat goes back into the rat deck.' });
@@ -69,7 +69,7 @@ const RATS = [
   ['feral', 'Feral Rat', 1, 1, [25, 39], 'Rivals can\'t Poach it or Hot Chilli it.'],
   ['spice', 'Spice Rat', 1, 1, [14, 32], 'Can\'t be debuffed (Hot Chilli, Muzzle, Disease).'],
   ['grub', 'Grub Rat', 1, 2, [35, 36, 37], 'None: cheap but runs hot.'],
-  ['sewer', 'Sewer Rat', 1, 0, [26, 38], 'No nest: no inspection can touch it.'],
+  ['sewer', 'Sewer Rat', 1, 0, [26, 38], 'No breed (a mongrel): no inspection can touch it.'],
   ['ratato', 'Ratato', 0, 1, [3, 5, 23, 29], 'None: junk.'],
 ];
 const NESTS = ['grill', 'cold', 'pantry']; let rot = 0;
@@ -104,12 +104,12 @@ function mini(c) {
   if (c.rat) {
     const col = c.nest ? NEST[c.nest][2] : '#6b6b6b';
     return `<div class="card mini" style="--c:${col}"><div class="mband"><span>${c.title}</span><span>${c.nest ? NEST[c.nest][0] : '🚫'}</span></div>
-      ${artBox({ key: c.key, icon: '🐀' }, 20)}<div class="mnest">${c.nest ? NEST[c.nest][1] : 'No nest'}</div>
+      ${artBox({ key: c.key, icon: '🐀' }, 20)}<div class="mnest">${c.nest ? NEST[c.nest][1] : 'No breed'}</div>
       <div class="stats m">${stat('Weight', c.w)}${stat('Heat', c.h)}${stat('Teeth', c.teeth)}</div><div class="mtext">${c.text}</div></div>`;
   }
   const [label, col] = SIDE[c.side];
   const body = c.food ? 'Spend for <b>feeding</b> rats, or <b>3 Food = 1 star</b>. Counts towards your 7-card hand. Spent Food goes back to the Food pile.'
-    : 'The first time you hold <b>3 rats of one nest</b>, hand this in and take 1 Food. Once per game.';
+    : 'The first time you hold <b>3 rats of one breed</b>, hand this in and take 1 Food. Once per game.';
   return `<div class="card mini" style="--c:${col}"><div class="mband"><span>${c.title}</span><span>${label}</span></div>${artBox(c, 24)}<div class="mtext big">${body}</div></div>`;
 }
 function sheets(cards, kind) {

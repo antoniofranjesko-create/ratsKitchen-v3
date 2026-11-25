@@ -894,10 +894,10 @@ function renderMyBar(){
     <div class="mb-rats">${p.rats.length?p.rats.map(ratHTML).join(''):'<span class="mb-none">no rats yet</span>'}</div>
     ${extra.length?`<div class="mb-extra">${extra.join('')}</div>`:''}`;
 }
-// long mode: rats live in nests (Grill / Cold store / Pantry) instead of colours
-const NEST={red:'🔥',blue:'❄️',green:'🌾'}, NESTNAME={red:'Grill',blue:'Cold store',green:'Pantry'};
+// long mode: rats come in three breeds (Rex / Hairless / Dumbo) instead of colours
+const NEST={red:'➰',blue:'🥚',green:'👂'}, NESTNAME={red:'Rex',blue:'Hairless',green:'Dumbo'};
 // long mode: rewrite colour words in log lines as nest names
-function nestWords(l){const f=t=>typeof t==='string'?t.replace(/\bred\b/gi,'Grill').replace(/\bblue\b/gi,'Cold store').replace(/\bgreen\b/gi,'Pantry').replace(/colou?r/gi,'nest'):t;return typeof l==='string'?f(l):Object.assign({},l,{text:f(l.text)});}
+function nestWords(l){const f=t=>typeof t==='string'?t.replace(/\bred\b/gi,'Rex').replace(/\bblue\b/gi,'Hairless').replace(/\bgreen\b/gi,'Dumbo').replace(/colou?r/gi,'breed'):t;return typeof l==='string'?f(l):Object.assign({},l,{text:f(l.text)});}
 // long mode: always-visible turn checklist + a rules summary
 function renderTurnGuide(meActive){
   const el=$('turnGuide'); if(!el) return;
@@ -953,7 +953,7 @@ function ratHTML(r){
   if(r.prop==='feed_eat')   marks.push('<span class="ratmark act" title="Larder — feed 1 Food: eat it for 1 star, once a turn">🍖</span>');
   if(r.muzzled) marks.push('<span class="ratmark" title="Muzzled — ability switched off">🤐</span>');
   if(r.diseased) marks.push('<span class="ratmark hot" title="Diseased — +1 heat">🦠</span>');
-  if(STATE&&STATE.longMode&&r.col) marks.push(`<span class="ratmark" title="Nest: ${NESTNAME[r.col]||''}">${NEST[r.col]||''}</span>`);
+  if(STATE&&STATE.longMode&&r.col) marks.push(`<span class="ratmark" title="Breed: ${NESTNAME[r.col]||''}">${NEST[r.col]||''}</span>`);
   return `<div class="${cls.join(' ')} ratclick" data-rat='${esc(JSON.stringify({kind:r.kind,name:r.name,w:r.w,heat:r.heat,col:r.col,desc:r.desc||"",prop:r.prop||null,teeth:r.teeth||0,muzzled:!!r.muzzled,diseased:!!r.diseased}))}' title="${esc(r.name)} · tap for role">
     <div class="band"></div>
     ${marks.length?`<div class="ratmarks">${marks.join('')}</div>`:''}
@@ -1075,7 +1075,7 @@ function showCardInfo(card){
 function showRatInfo(r){
   const hasTask = r.prop && r.prop!=='plain rat, no special task';
   const roleLabel = hasTask ? 'Special rat' : 'Plain stock — no special task';
-  const colTxt = (STATE&&STATE.longMode) ? (r.col ? `${NEST[r.col]} ${NESTNAME[r.col]} nest` : 'No nest') : (r.col ? ({red:'🔴 Red',blue:'🔵 Blue',green:'🟢 Green',yellow:'🟡 Yellow'}[r.col]||r.col) : 'Colourless');
+  const colTxt = (STATE&&STATE.longMode) ? (r.col ? `${NEST[r.col]} ${NESTNAME[r.col]}` : 'No breed') : (r.col ? ({red:'🔴 Red',blue:'🔵 Blue',green:'🟢 Green',yellow:'🟡 Yellow'}[r.col]||r.col) : 'Colourless');
   const wrap=document.createElement('div');
   wrap.className='cardinfo';
   wrap.innerHTML=`<div class="box">
