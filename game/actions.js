@@ -631,8 +631,8 @@ function apply0(g, p, act, targetId, ratId) {
       const i = p.hand.findIndex(c => c.tonic); if (i < 0) break;
       p.hand.splice(i, 1);
       if (global.__v5) { global.__v5.heal = (global.__v5.heal || 0) + 1; global.__v5.tonic = (global.__v5.tonic || 0) + 1; }
-      p.stars = Math.min((p.maxStars || E.STARS), p.stars + 1); p._actedBuild = true;
-      E.logAdd(g, `${p.name} eats a Tonic: +1 star.`); break;
+      const tv = +(process.env.TONICVAL || 1); p.stars = Math.min((p.maxStars || E.STARS), p.stars + tv); p._actedBuild = true;
+      E.logAdd(g, `${p.name} eats a Tonic: +${tv} star${tv > 1 ? 's' : ''}.`); break;
     }
     case 'food_clean': {
       const r = p.rats.find(x => x.id === ratId) || p.rats.find(x => x._muzzled || x._dis || x._stink || x._tag || x._chilliBy); if (!r) break;
