@@ -397,5 +397,29 @@ io.on('connection', (socket) => {
 const VERSION = 'L1.5';
 app.get('/version', (req, res) => res.json({ version: VERSION }));
 
+// ---- /art: phone page that makes the card art (Pollinations, free) and lays out the print sheets ----
+// The server fetches each picture once (one at a time, ~16 s apart for the free tier) and caches it.
+{
+  const fs = require('fs');
+  let ART = {}; try { const P = require('./tools/print/prompts'); for (const j of P.jobs) ART[j.file] = P.urlFor(j); } catch (e) { console.log('art prompts missing', e.message); }
+  const CACHE = path.join(require('os').tmpdir(), 'ratart'); fs.mkdirSync(CACHE, { recursive: true });
+  let chain = Promise.resolve(), last = 0;
+  const fetchOne = file => chain = chain.then(async () => {
+    const f = path.join(CACHE, file + '.jpg'); if (fs.existsSync(f)) return;
+    const wait = last + 16000 - Date.now(); if (wait > 0) await new Promise(r => setTimeout(r, wait));
+    try { const r = await fetch(ART[file]); if (!r.ok) throw new Error('HTTP ' + r.status); fs.writeFileSync(f, Buffer.from(await r.arrayBuffer())); }
+    finally { last = Date.now(); }
+  });
+  app.get('/art', (req, res) => res.sendFile(path.join(__dirname, 'public', 'art.html')));
+  app.get('/artimg/:file', async (req, res) => {
+    const file = String(req.params.file).replace(/\.jpg$/, '');
+    if (!ART[file]) return res.status(404).end();
+    const f = path.join(CACHE, file + '.jpg');
+    if (!fs.existsSync(f)) { if (req.query.cached) return res.status(404).end(); try { await fetchOne(file); } catch (e) { return res.status(502).send(e.message); } }
+    if (!fs.existsSync(f)) return res.status(502).end();
+    res.set('Cache-Control', 'public, max-age=86400'); res.sendFile(f);
+  });
+}
+
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => console.log(`Rat's Kitchen v${VERSION} on :${PORT}`));

@@ -83,7 +83,11 @@ for (let i = 0; i < 6; i++) MINI.push({ key: 'kind3', side: 'token', title: 'Thr
 // ---------- rendering ----------
 const artFor = key => { for (const ext of ['png', 'jpg', 'jpeg', 'webp']) { const f = path.join(ART, `${key}.${ext}`); if (fs.existsSync(f)) return 'file://' + f; } return null; };
 const nestBadge = n => `<span class="nest" style="background:${NEST[n][2]}">${NEST[n][0]} ${NEST[n][1]}</span>`;
-const artBox = (c, h) => { const a = artFor(c.key + (c.breed ? '_' + c.breed : '')) || artFor(c.key), v = a ? null : art(c.key, { breed: c.breed });
+let WEB = false;
+const artFile = c => c.key === 'sewer' ? 'sewer' : c.breed ? `${c.key}_${c.breed}` : c.key;
+const artBox = (c, h) => {
+  if (WEB) { const v = art(c.key, { breed: c.breed }); return `<div class="art vec" data-art="${artFile(c)}" style="height:${h}mm">${v || ''}</div>`; }
+  const a = artFor(c.key + (c.breed ? '_' + c.breed : '')) || artFor(c.key), v = a ? null : art(c.key, { breed: c.breed });
   if (v) return `<div class="art vec" style="height:${h}mm">${v}</div>`;
   return a ? `<div class="art" style="height:${h}mm;background-image:url('${a}')"></div>`
     : `<div class="art ph" style="height:${h}mm"><span class="emo">${c.icon || '🐀'}</span><span class="artkey">art: ${c.key}</span></div>`; };
@@ -149,6 +153,48 @@ const pages = [...sheets(POKER, 'poker'), ...sheets(MINI, 'mini')];
 const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Rat's Kitchen long mode — print-and-play</title><style>${css}</style></head><body>${pages.join('')}</body></html>`;
 fs.writeFileSync(path.join(OUT, 'cards.html'), html);
 console.log(`poker ${POKER.length} cards (${Math.ceil(POKER.length / 9)} sheets), mini ${MINI.length} cards (${Math.ceil(MINI.length / 16)} sheets), market ${M.length}`);
+
+// ---------- web version for phones: public/art.html (served at /art) ----------
+WEB = true;
+const webPages = [...sheets(POKER, 'poker'), ...sheets(MINI, 'mini')];
+const files = require('./prompts').jobs.map(j => j.file);
+const webCss = `@media screen{body{background:#ddd}#sheets{transform-origin:0 0}.page{background:#fff;margin:0 auto 8mm;box-shadow:0 1mm 4mm #0003}}
+#bar{position:sticky;top:0;z-index:9;background:#1d1b19;color:#fff;font:14px/1.35 system-ui,sans-serif;padding:10px 12px}
+#bar h1{font-size:16px;margin:0 0 6px}#bar button{font:600 14px system-ui;border:0;border-radius:8px;padding:9px 12px;margin:6px 6px 0 0;background:#f2c43d;color:#1d1b19}
+#bar button:disabled{opacity:.4}#prog{height:8px;background:#444;border-radius:4px;margin-top:8px;overflow:hidden}#prog i{display:block;height:100%;width:0;background:#7cc04b}
+#msg{font-size:12.5px;opacity:.85;margin-top:6px}.art img{width:100%;height:100%;object-fit:cover;display:block}
+@media print{#bar{display:none}body{background:#fff}#sheets{transform:none!important;height:auto!important}}`;
+const webJs = `const FILES=${JSON.stringify(files)};const got={};let running=false,lock=null;
+const $=id=>document.getElementById(id);
+function fit(){const s=Math.min(1,(innerWidth-8)/document.querySelector('.page').offsetWidth);const sh=$('sheets');sh.style.transform='scale('+s+')';sh.style.height=(sh.scrollHeight*s)+'px';}
+addEventListener('resize',fit);addEventListener('load',fit);
+function show(f,url){document.querySelectorAll('[data-art="'+f+'"]').forEach(d=>{d.innerHTML='<img src="'+url+'">';d.classList.remove('vec');});}
+function status(){const n=Object.keys(got).length;$('prog').firstChild.style.width=(100*n/FILES.length)+'%';$('count').textContent=n+' of '+FILES.length+' pictures';$('zip').disabled=!n;}
+async function wake(){try{if('wakeLock' in navigator){lock=await navigator.wakeLock.request('screen');}}catch(e){}}
+document.addEventListener('visibilitychange',()=>{if(running&&document.visibilityState==='visible')wake();});
+async function start(){if(running)return;running=true;$('go').disabled=true;await wake();
+ for(const f of FILES){if(got[f])continue;$('msg').textContent='Drawing '+f.replace(/_/g,' ')+'… keep this screen open.';
+  let ok=false;for(let t=0;t<4&&!ok;t++){try{const r=await fetch('/artimg/'+f+'.jpg');if(!r.ok)throw 0;const b=await r.blob();got[f]=b;show(f,URL.createObjectURL(b));ok=true;}catch(e){$('msg').textContent='Retrying '+f+'…';await new Promise(r=>setTimeout(r,8000));}}
+  status();}
+ running=false;$('msg').textContent='All done. Download the art, or Print → Save as PDF (A4, scale 100%, no margins).';try{lock&&lock.release();}catch(e){}}
+const CRC=(()=>{const t=[];for(let n=0;n<256;n++){let c=n;for(let k=0;k<8;k++)c=c&1?0xEDB88320^(c>>>1):c>>>1;t[n]=c>>>0;}return t;})();
+const crc=b=>{let c=0xFFFFFFFF;for(let i=0;i<b.length;i++)c=CRC[(c^b[i])&255]^(c>>>8);return(c^0xFFFFFFFF)>>>0;};
+async function zip(){const parts=[],cent=[];let off=0;const enc=new TextEncoder();
+ for(const f of FILES){if(!got[f])continue;const d=new Uint8Array(await got[f].arrayBuffer()),nm=enc.encode('art/'+f+'.jpg'),c=crc(d);
+  const h=new DataView(new ArrayBuffer(30));h.setUint32(0,0x04034b50,true);h.setUint16(4,20,true);h.setUint32(14,c,true);h.setUint32(18,d.length,true);h.setUint32(22,d.length,true);h.setUint16(26,nm.length,true);
+  parts.push(h.buffer,nm,d);const e=new DataView(new ArrayBuffer(46));e.setUint32(0,0x02014b50,true);e.setUint16(4,20,true);e.setUint16(6,20,true);e.setUint32(16,c,true);e.setUint32(20,d.length,true);e.setUint32(24,d.length,true);e.setUint16(28,nm.length,true);e.setUint32(42,off,true);
+  cent.push(e.buffer,nm);off+=30+nm.length+d.length;}
+ const cs=cent.reduce((a,b)=>a+(b.byteLength||b.length),0),n=cent.length/2,z=new DataView(new ArrayBuffer(22));z.setUint32(0,0x06054b50,true);z.setUint16(8,n,true);z.setUint16(10,n,true);z.setUint32(12,cs,true);z.setUint32(16,off,true);
+ const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([...parts,...cent,z.buffer],{type:'application/zip'}));a.download='ratskitchen-art.zip';a.click();}
+function printIt(){$('sheets').style.transform='none';$('sheets').style.height='auto';print();setTimeout(fit,500);}
+(async()=>{for(const f of FILES){try{const r=await fetch('/artimg/'+f+'.jpg?cached=1');if(r.ok){const b=await r.blob();got[f]=b;show(f,URL.createObjectURL(b));}}catch(e){}}status();})();`;
+const webHtml = `<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Rat's Kitchen — card art</title><style>${css}${webCss}</style></head><body>
+<div id="bar"><h1>Rat's Kitchen · print-and-play</h1><div id="count">0 pictures</div><div id="prog"><i></i></div>
+<button id="go" onclick="start()">Make the art (≈20 min)</button><button id="zip" onclick="zip()" disabled>Download art (zip)</button><button onclick="printIt()">Print / Save PDF</button>
+<div id="msg">Press “Make the art” and keep this screen open. Pictures already made load straight away. The drawings shown now are stand-ins.</div></div>
+<div id="sheets">${webPages.join('')}</div><script>${webJs}</script></body></html>`;
+fs.writeFileSync(path.join(__dirname, '..', '..', 'public', 'art.html'), webHtml);
+console.log('wrote public/art.html (' + files.length + ' pictures)');
 
 (async () => {
   const { chromium } = require(require('child_process').execSync('npm root -g').toString().trim() + '/playwright');
